@@ -15,9 +15,9 @@
         background: rgb(240, 240, 240);
     }
 
-    /* Simple dark background */
+    /* Simple light background */
     .vibrant-bg {
-        background: rgb(0, 0, 0);
+        background: rgb(255, 255, 255);
     }
 
     /* Simple border */
@@ -27,12 +27,12 @@
 
     /* Simple icon box */
     .vibrant-icon-box {
-        background: rgb(40, 40, 40);
+        background: rgb(240, 240, 240);
     }
 
     /* Simple text */
     .vibrant-text {
-        color: rgb(255, 255, 255);
+        color: rgb(0, 0, 0);
     }
 
     /* Connected status */

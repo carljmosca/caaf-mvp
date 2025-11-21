@@ -16,7 +16,7 @@ export const ChatInterface: React.FC = () => {
     const [input, setInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [mcpClient] = useState(() => new McpClientWrapper());
-    const [graniteService] = useState(() => new GraniteService());
+    const [graniteService] = useState(() => new GraniteService("lm-studio", "/api/ai/v1/chat/completions"));
     const [orchestrator] = useState(() => new AgentOrchestrator(mcpClient, graniteService));
     const [isConnected, setIsConnected] = useState(false);
     const [mcpUrl, setMcpUrl] = useState('http://localhost:3000/mcp');

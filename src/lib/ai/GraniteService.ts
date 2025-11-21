@@ -8,28 +8,24 @@ export class GraniteService {
     }
 
     async generate(prompt: string): Promise<string> {
-        if (!this.apiKey) {
-            console.warn("No API key provided for GraniteService. Using mock response.");
-            return this.mockResponse(prompt);
-        }
+        // LM Studio local server usually doesn't strictly require an API key, 
+        // but we'll keep the check if one is provided, or default to a dummy one if needed.
+        // For local dev, we can just proceed.
 
         try {
             const response = await fetch(this.endpoint, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    "Authorization": `Bearer ${this.apiKey}`,
+                    "Authorization": `Bearer ${this.apiKey || "lm-studio"}`,
                 },
                 body: JSON.stringify({
-                    model_id: "ibm/granite-3b-chat-v2",
-                    inputs: [prompt],
-                    parameters: {
-                        decoding_method: "greedy",
-                        max_new_tokens: 200,
-                        min_new_tokens: 0,
-                        stop_sequences: [],
-                        repetition_penalty: 1.0,
-                    },
+                    model: "ibm/granite-3.2-8b",
+                    messages: [
+                        { role: "user", content: prompt }
+                    ],
+                    temperature: 0.7,
+                    stream: false
                 }),
             });
 
@@ -38,10 +34,15 @@ export class GraniteService {
             }
 
             const data = await response.json();
-            return data.results[0].generated_text;
-        } catch (error) {
+            return data.choices[0].message.content;
+        } catch (error: any) {
             console.error("Error calling Granite API:", error);
-            return "Sorry, I encountered an error connecting to the AI model.";
+            if (error instanceof TypeError && error.message === "Failed to fetch") {
+                console.error("Network error: Check if LM Studio is running and CORS is enabled.");
+            }
+            // Fallback to mock if connection fails (e.g. LM Studio not running)
+            console.warn("Falling back to mock response due to error.");
+            return this.mockResponse(prompt);
         }
     }
 
