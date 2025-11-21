@@ -64,7 +64,44 @@ export class AgentOrchestrator {
 
                         // Optional: Feed tool result back to Granite for a final natural language response
                         // For MVP, we'll just return the tool output formatted nicely
-                        return `Tool '${parsed.tool}' executed successfully.\nOutput: ${JSON.stringify(toolResult, null, 2)}`;
+                        // Check if the result has a 'result' property and use it if available
+                        let outputDisplay = `Output: ${JSON.stringify(toolResult, null, 2)}`;
+
+                        // Helper to extract result
+                        let extractedResult = undefined;
+
+                        if (toolResult && typeof toolResult === 'object') {
+                            // 1. Check top-level 'result'
+                            if ('result' in toolResult) {
+                                extractedResult = (toolResult as any).result;
+                            }
+                            // 2. Check 'structuredContent.result' (as seen in some implementations)
+                            else if ('structuredContent' in toolResult && (toolResult as any).structuredContent?.result) {
+                                extractedResult = (toolResult as any).structuredContent.result;
+                            }
+                            // 3. Check inside 'content' array if it contains a JSON string with 'result'
+                            else if ('content' in toolResult && Array.isArray((toolResult as any).content)) {
+                                for (const item of (toolResult as any).content) {
+                                    if (item.type === 'text' && item.text) {
+                                        try {
+                                            const parsedText = JSON.parse(item.text);
+                                            if (parsedText && typeof parsedText === 'object' && 'result' in parsedText) {
+                                                extractedResult = parsedText.result;
+                                                break;
+                                            }
+                                        } catch (e) {
+                                            // Not JSON, continue
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (extractedResult !== undefined) {
+                            outputDisplay = typeof extractedResult === 'string' ? extractedResult : JSON.stringify(extractedResult, null, 2);
+                        }
+
+                        return `Tool '${parsed.tool}' executed successfully:\n${outputDisplay}`;
                     }
                 }
             } catch (e) {

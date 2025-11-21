@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Send, Cpu } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Send, Cpu, PlusCircle } from 'lucide-react';
 import { McpClientWrapper } from '../lib/mcp/McpClient';
 import { TransformersService } from '../lib/ai/TransformersService';
 import { AgentOrchestrator } from '../lib/ai/AgentOrchestrator';
@@ -23,6 +23,7 @@ export const ChatInterface: React.FC = () => {
     const [transportType, setTransportType] = useState<'ws' | 'http'>('http');
     const [tools, setTools] = useState<any[]>([]);
     const [downloadProgress, setDownloadProgress] = useState<any>(null);
+    const hasConnected = useRef(false);
 
     const handleConnect = async () => {
         try {
@@ -52,6 +53,13 @@ export const ChatInterface: React.FC = () => {
         }
     };
 
+    useEffect(() => {
+        if (!hasConnected.current) {
+            hasConnected.current = true;
+            handleConnect();
+        }
+    }, []);
+
     const handleSend = async () => {
         if (!input.trim()) return;
 
@@ -74,14 +82,39 @@ export const ChatInterface: React.FC = () => {
         }
     };
 
+    const handleNewChat = () => {
+        if (isProcessing) return;
+        setMessages([]);
+        setInput('');
+        setDownloadProgress(null);
+    };
+
     return (
         <div className="flex h-screen vibrant-bg text-white font-sans">
             {/* Sidebar for Tools */}
-            {isConnected && (
-                <div className="w-80 border-r vibrant-border bg-slate-950/40 backdrop-blur-xl overflow-y-auto shadow-2xl shadow-blue-500/10">
-                    <ToolStatus tools={tools} />
+            {/* Sidebar for Tools */}
+            <div className="w-80 border-r vibrant-border bg-slate-950/40 backdrop-blur-xl flex flex-col shadow-2xl shadow-blue-500/10">
+                <div className="p-4 border-b border-blue-500/10">
+                    <button
+                        onClick={handleNewChat}
+                        disabled={isProcessing}
+                        className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed font-medium group"
+                    >
+                        <PlusCircle className="w-5 h-5 group-hover:rotate-90 transition-transform" />
+                        <span>New Chat</span>
+                    </button>
                 </div>
-            )}
+
+                <div className="flex-1 overflow-y-auto">
+                    {isConnected ? (
+                        <ToolStatus tools={tools} />
+                    ) : (
+                        <div className="p-6 text-center text-gray-500 text-sm">
+                            <p>Connect to MCP Server to see available tools.</p>
+                        </div>
+                    )}
+                </div>
+            </div>
 
             {/* Main Chat Area */}
             <div className="flex flex-col flex-1">
@@ -99,6 +132,7 @@ export const ChatInterface: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
+
                         <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all ${isConnected
                             ? 'status-connected'
                             : 'status-disconnected'
@@ -162,6 +196,7 @@ export const ChatInterface: React.FC = () => {
                                     <div className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce shadow-lg shadow-cyan-400/50" style={{ animationDelay: '0ms' }} />
                                     <div className="w-2.5 h-2.5 bg-blue-400 rounded-full animate-bounce shadow-lg shadow-blue-400/50" style={{ animationDelay: '150ms' }} />
                                     <div className="w-2.5 h-2.5 bg-pink-400 rounded-full animate-bounce shadow-lg shadow-pink-400/50" style={{ animationDelay: '300ms' }} />
+                                    <span className="text-xs text-blue-300 ml-2 font-medium animate-pulse">Thinking...</span>
                                 </div>
                             </div>
 
