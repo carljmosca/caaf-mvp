@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.0",
     "@modelcontextprotocol/sdk": "^1.22.0",
     "lucide-react": "^0.554.0",
     "react": "^19.2.0",

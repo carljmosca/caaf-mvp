@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Send, Cpu } from 'lucide-react';
 import { McpClientWrapper } from '../lib/mcp/McpClient';
-import { GraniteService } from '../lib/ai/GraniteService';
+import { TransformersService } from '../lib/ai/TransformersService';
 import { AgentOrchestrator } from '../lib/ai/AgentOrchestrator';
 import { ToolStatus } from './ToolStatus';
 
@@ -11,17 +11,18 @@ interface Message {
 }
 
 export const ChatInterface: React.FC = () => {
-    console.log("ChatInterface loaded - Version: BLACK-WHITE-SIMPLE");
+    console.log("ChatInterface loaded - Version: TRANSFORMERS-V2");
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [mcpClient] = useState(() => new McpClientWrapper());
-    const [graniteService] = useState(() => new GraniteService("lm-studio", "/api/ai/v1/chat/completions"));
-    const [orchestrator] = useState(() => new AgentOrchestrator(mcpClient, graniteService));
+    const [aiService] = useState(() => new TransformersService());
+    const [orchestrator] = useState(() => new AgentOrchestrator(mcpClient, aiService));
     const [isConnected, setIsConnected] = useState(false);
     const [mcpUrl, setMcpUrl] = useState('http://localhost:3000/mcp');
     const [transportType, setTransportType] = useState<'ws' | 'http'>('http');
     const [tools, setTools] = useState<any[]>([]);
+    const [downloadProgress, setDownloadProgress] = useState<any>(null);
 
     const handleConnect = async () => {
         try {
@@ -60,12 +61,16 @@ export const ChatInterface: React.FC = () => {
         setIsProcessing(true);
 
         try {
-            const response = await orchestrator.processMessage(input);
+            setDownloadProgress(null);
+            const response = await orchestrator.processMessage(input, (progress) => {
+                setDownloadProgress(progress);
+            });
             setMessages(prev => [...prev, { role: 'agent', content: response }]);
         } catch (e) {
             setMessages(prev => [...prev, { role: 'agent', content: 'Error processing message.' }]);
         } finally {
             setIsProcessing(false);
+            setDownloadProgress(null);
         }
     };
 
@@ -135,7 +140,8 @@ export const ChatInterface: React.FC = () => {
                         <div className="flex flex-col items-center justify-center h-full">
                             <div className="p-8 bg-gradient-to-br from-blue-500/10 via-blue-400/10 to-blue-600/10 rounded-3xl border-2 border-blue-500/20 backdrop-blur-sm shadow-2xl shadow-blue-500/20">
                                 <Cpu className="w-24 h-24 mb-4 text-blue-400/60 mx-auto animate-pulse" />
-                                <p className="text-gray-300 text-center font-medium">Start a conversation with your AI agent...</p>
+                                <p className="text-gray-300 text-center font-medium">Start a conversation with your local AI agent...</p>
+                                <p className="text-xs text-gray-500 text-center mt-2">(Model: onnx-community/granite-4.0-350m-ONNX-web)</p>
                             </div>
                         </div>
                     )}
@@ -150,12 +156,33 @@ export const ChatInterface: React.FC = () => {
                         </div>
                     ))}
                     {isProcessing && (
-                        <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <div className="bg-slate-900/60 rounded-2xl rounded-bl-sm px-5 py-3 border-2 border-blue-500/20 backdrop-blur-sm flex items-center gap-2 shadow-xl shadow-blue-500/20">
-                                <div className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce shadow-lg shadow-cyan-400/50" style={{ animationDelay: '0ms' }} />
-                                <div className="w-2.5 h-2.5 bg-blue-400 rounded-full animate-bounce shadow-lg shadow-blue-400/50" style={{ animationDelay: '150ms' }} />
-                                <div className="w-2.5 h-2.5 bg-pink-400 rounded-full animate-bounce shadow-lg shadow-pink-400/50" style={{ animationDelay: '300ms' }} />
+                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <div className="flex justify-start">
+                                <div className="bg-slate-900/60 rounded-2xl rounded-bl-sm px-5 py-3 border-2 border-blue-500/20 backdrop-blur-sm flex items-center gap-2 shadow-xl shadow-blue-500/20">
+                                    <div className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce shadow-lg shadow-cyan-400/50" style={{ animationDelay: '0ms' }} />
+                                    <div className="w-2.5 h-2.5 bg-blue-400 rounded-full animate-bounce shadow-lg shadow-blue-400/50" style={{ animationDelay: '150ms' }} />
+                                    <div className="w-2.5 h-2.5 bg-pink-400 rounded-full animate-bounce shadow-lg shadow-pink-400/50" style={{ animationDelay: '300ms' }} />
+                                </div>
                             </div>
+
+                            {downloadProgress && downloadProgress.status === 'progress' && (
+                                <div className="w-full max-w-md bg-slate-900/80 rounded-xl p-4 border border-blue-500/30 backdrop-blur-md shadow-2xl ml-2">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs font-semibold text-blue-300 uppercase tracking-wider">Downloading Model</span>
+                                        <span className="text-xs font-bold text-white">{Math.round(downloadProgress.progress || 0)}%</span>
+                                    </div>
+                                    <div className="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
+                                        <div
+                                            className="bg-gradient-to-r from-cyan-400 to-blue-500 h-full rounded-full transition-all duration-300 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                                            style={{ width: `${downloadProgress.progress || 0}%` }}
+                                        />
+                                    </div>
+                                    <div className="flex justify-between mt-2 text-[10px] text-gray-400">
+                                        <span className="truncate max-w-[200px]">{downloadProgress.file}</span>
+                                        <span>{downloadProgress.loaded && downloadProgress.total ? `${(downloadProgress.loaded / 1024 / 1024).toFixed(1)}MB / ${(downloadProgress.total / 1024 / 1024).toFixed(1)}MB` : ''}</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

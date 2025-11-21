@@ -1,20 +1,26 @@
 import { McpClientWrapper } from "../mcp/McpClient";
-import { GraniteService } from "./GraniteService";
+import { TransformersService } from "./TransformersService";
 
 export class AgentOrchestrator {
     private mcpClient: McpClientWrapper;
-    private graniteService: GraniteService;
+    private aiService: TransformersService;
 
-    constructor(mcpClient: McpClientWrapper, graniteService: GraniteService) {
+    constructor(mcpClient: McpClientWrapper, aiService: TransformersService) {
         this.mcpClient = mcpClient;
-        this.graniteService = graniteService;
+        this.aiService = aiService;
     }
 
-    async processMessage(message: string): Promise<string> {
+    async processMessage(message: string, onProgress?: (progress: any) => void): Promise<string> {
         try {
             // 1. Fetch available tools
-            const toolsList = await this.mcpClient.listTools();
-            const tools = toolsList.tools || [];
+            let tools: any[] = [];
+            try {
+                const toolsList = await this.mcpClient.listTools();
+                tools = toolsList.tools || [];
+            } catch (error) {
+                console.warn("Failed to list tools (likely not connected to MCP):", error);
+                // Continue without tools
+            }
 
             // 2. Construct System Prompt
             let systemPrompt = `You are a helpful AI assistant. You have access to the following tools:\n\n`;
@@ -39,10 +45,10 @@ export class AgentOrchestrator {
 
             systemPrompt += `\nUser Message: ${message}`;
 
-            // 3. Call Granite
-            console.log("Sending prompt to Granite:", systemPrompt);
-            const response = await this.graniteService.generate(systemPrompt);
-            console.log("Granite response:", response);
+            // 3. Call AI Model
+            console.log("Sending prompt to AI:", systemPrompt);
+            const response = await this.aiService.generate(systemPrompt, onProgress);
+            console.log("AI response:", response);
 
             // 4. Parse Response
             try {
