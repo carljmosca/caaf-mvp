@@ -11,6 +11,7 @@ export class AgentOrchestrator {
     }
 
     async processMessage(message: string, onProgress?: (progress: any) => void): Promise<string> {
+        let response: string = "";
         try {
             // 1. Fetch available tools
             let tools: any[] = [];
@@ -22,98 +23,121 @@ export class AgentOrchestrator {
                 // Continue without tools
             }
 
-            // 2. Construct System Prompt
-            let systemPrompt = `You are a helpful AI assistant. You have access to the following tools:\n\n`;
+            // 2. Construct systemPrompt with dynamic tool listing
+            let systemPrompt = `You are a helpful, expert server assistant capable of utilizing external tools to answer user queries (as opoosed to answering them yourself).`;
+            systemPrompt += `Your primary function is to analyze the user's request and determine if one of the AVAILABLE TOOLS is appropriate to answer the query.`;
+            systemPrompt += `The use of a tool should be given priority.  If an appropriate tool is available, your entire response MUST be a valid JSON object matching the Tool Use Request Format. DO NOT output any other text or explanation. If no tool is needed, respond with standard conversational text.\n\n`;
+            systemPrompt += `**INSTRUCTION:** If a tool is to be utilized, your entire response MUST ONLY be a valid JSON object matching the Tool Use Request Format. DO NOT output any other text or explanation. If no tool is appropriate, respond with standard conversational text.`
+            systemPrompt += `\n\n`;
+            systemPrompt += '**Tool Use Request Format (MANDATORY JSON SCHEMA):**\n';
+            systemPrompt += '{\n  "tool_name": "<name_of_tool_to_use>",\n  "tool_arguments": {\n    "<argument_name>": "<value>",\n    ...\n  }\n}\n\n';
+            systemPrompt += '**AVAILABLE TOOLS:**\n\n';
+            tools.forEach((tool, idx) => {
+                systemPrompt += `${idx + 1}.  **Tool Name: ${tool.name}**\n`;
+                systemPrompt += `    * Description: ${tool.description || 'No description provided.'}\n`;
+                if (tool.inputSchema && tool.inputSchema.properties && Object.keys(tool.inputSchema.properties).length > 0) {
+                    systemPrompt += `    * Arguments:`;
+                    type ArgSchema = { type?: string; description?: string; [key: string]: any };
+                    Object.entries(tool.inputSchema.properties as Record<string, ArgSchema>).forEach(([arg, schema]) => {
+                        const argType = schema.type || 'unknown';
+                        const argDesc = schema.description || '';
+                        systemPrompt += `\n        * ${arg} (${argType}): ${argDesc}`;
+                    });
+                    systemPrompt += '\n';
+                } else {
+                    systemPrompt += '    * Arguments: None.\n';
+                }
+                systemPrompt += '\n';
+            });
 
-            if (tools.length > 0) {
-                tools.forEach((t: any) => {
-                    systemPrompt += `- ${t.name}: ${t.description || "No description provided."}\n`;
-                    systemPrompt += `  Schema: ${JSON.stringify(t.inputSchema)}\n`;
-                });
-                systemPrompt += `\nIMPORTANT: If the user's request requires a tool, you MUST respond ONLY with a JSON object. Do not add any other text.\n`;
-                systemPrompt += `Use this format:\n`;
-                systemPrompt += `{ "tool": "tool_name", "arguments": { "arg_name": "value" } }\n\n`;
-                systemPrompt += `Examples:\n`;
-                systemPrompt += `User: "Add 5 and 3"\n`;
-                systemPrompt += `Assistant: { "tool": "add", "arguments": { "a": 5, "b": 3 } }\n\n`;
-                systemPrompt += `User: "Hi there"\n`;
-                systemPrompt += `Assistant: Hello! How can I help you today?\n\n`;
-                systemPrompt += `If no tool is needed, respond normally in plain text.\n`;
-            } else {
-                systemPrompt += "No tools are currently available. Respond normally in plain text.\n";
+            const messages = [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: message }
+            ];
+            console.log("Sending messages to AI service:", messages);
+            response = await this.aiService.generate(messages, onProgress);
+            console.log("AI service response:", response);
+
+            // 2. Robustly extract the last valid JSON object (brace-matching, supports nested)
+            function extractLastJsonObject(text: string): any | null {
+                let end = text.lastIndexOf('}');
+                while (end !== -1) {
+                    let stack = 0;
+                    for (let start = end; start >= 0; start--) {
+                        if (text[start] === '}') stack++;
+                        else if (text[start] === '{') stack--;
+                        if (stack === 0) {
+                            const candidate = text.slice(start, end + 1);
+                            try {
+                                const parsed = JSON.parse(candidate);
+                                if (parsed && parsed.tool_name) return parsed;
+                            } catch (e) {
+                                // Not valid JSON, keep searching
+                            }
+                        }
+                    }
+                    end = text.lastIndexOf('}', end - 1);
+                }
+                return null;
             }
 
-            systemPrompt += `\nUser Message: ${message}`;
+            const lastValidJson = extractLastJsonObject(response);
 
-            // 3. Call AI Model
-            console.log("Sending prompt to AI:", systemPrompt);
-            const response = await this.aiService.generate(systemPrompt, onProgress);
-            console.log("AI response:", response);
+            if (lastValidJson && lastValidJson.tool_name) {
+                console.log(`Executing tool: ${lastValidJson.tool_name}`);
+                // Use empty object if tool_arguments is missing or not an object
+                let args = {};
+                if (lastValidJson.tool_arguments && typeof lastValidJson.tool_arguments === 'object') {
+                    args = lastValidJson.tool_arguments;
+                }
+                const toolResult = await this.mcpClient.callTool(lastValidJson.tool_name, args);
 
-            // 4. Parse Response
-            try {
-                // Attempt to find JSON in the response (in case there's extra text)
-                const jsonMatch = response.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    const potentialJson = jsonMatch[0];
-                    const parsed = JSON.parse(potentialJson);
+                // Optional: Feed tool result back to Granite for a final natural language response
+                // For MVP, we'll just return the tool output formatted nicely
+                // Check if the result has a 'result' property and use it if available
+                let outputDisplay = `Output: ${JSON.stringify(toolResult, null, 2)}`;
 
-                    if (parsed.tool && parsed.arguments) {
-                        console.log(`Executing tool: ${parsed.tool}`);
-                        const toolResult = await this.mcpClient.callTool(parsed.tool, parsed.arguments);
+                // Helper to extract result
+                let extractedResult = undefined;
 
-                        // Optional: Feed tool result back to Granite for a final natural language response
-                        // For MVP, we'll just return the tool output formatted nicely
-                        // Check if the result has a 'result' property and use it if available
-                        let outputDisplay = `Output: ${JSON.stringify(toolResult, null, 2)}`;
-
-                        // Helper to extract result
-                        let extractedResult = undefined;
-
-                        if (toolResult && typeof toolResult === 'object') {
-                            // 1. Check top-level 'result'
-                            if ('result' in toolResult) {
-                                extractedResult = (toolResult as any).result;
-                            }
-                            // 2. Check 'structuredContent.result' (as seen in some implementations)
-                            else if ('structuredContent' in toolResult && (toolResult as any).structuredContent?.result) {
-                                extractedResult = (toolResult as any).structuredContent.result;
-                            }
-                            // 3. Check inside 'content' array if it contains a JSON string with 'result'
-                            else if ('content' in toolResult && Array.isArray((toolResult as any).content)) {
-                                for (const item of (toolResult as any).content) {
-                                    if (item.type === 'text' && item.text) {
-                                        try {
-                                            const parsedText = JSON.parse(item.text);
-                                            if (parsedText && typeof parsedText === 'object' && 'result' in parsedText) {
-                                                extractedResult = parsedText.result;
-                                                break;
-                                            }
-                                        } catch (e) {
-                                            // Not JSON, continue
-                                        }
+                if (toolResult && typeof toolResult === 'object') {
+                    // 1. Check top-level 'result'
+                    if ('result' in toolResult) {
+                        extractedResult = (toolResult as any).result;
+                    }
+                    // 2. Check 'structuredContent.result' (as seen in some implementations)
+                    else if ('structuredContent' in toolResult && (toolResult as any).structuredContent?.result) {
+                        extractedResult = (toolResult as any).structuredContent.result;
+                    }
+                    // 3. Check inside 'content' array if it contains a JSON string with 'result'
+                    else if ('content' in toolResult && Array.isArray((toolResult as any).content)) {
+                        for (const item of (toolResult as any).content) {
+                            if (item.type === 'text' && item.text) {
+                                try {
+                                    const parsedText = JSON.parse(item.text);
+                                    if (parsedText && typeof parsedText === 'object' && 'result' in parsedText) {
+                                        extractedResult = parsedText.result;
+                                        break;
                                     }
+                                } catch (e) {
+                                    // Not JSON, continue
                                 }
                             }
                         }
-
-                        if (extractedResult !== undefined) {
-                            outputDisplay = typeof extractedResult === 'string' ? extractedResult : JSON.stringify(extractedResult, null, 2);
-                        }
-
-                        return `Tool '${parsed.tool}' executed successfully:\n${outputDisplay}`;
                     }
                 }
-            } catch (e) {
-                // Not JSON or invalid format, treat as normal text
-                console.log("Response was not a valid tool call, returning as text.");
+
+                if (extractedResult !== undefined) {
+                    outputDisplay = typeof extractedResult === 'string' ? extractedResult : JSON.stringify(extractedResult, null, 2);
+                }
+
+                return `Response from '${lastValidJson.tool_name}':\n${outputDisplay}`;
             }
-
-            return response;
-
-        } catch (error: any) {
-            console.error("Error in AgentOrchestrator:", error);
-            return `Error processing request: ${error.message}`;
+        } catch (e) {
+            // Not JSON or invalid format, treat as normal text
+            console.log("Response was not a valid tool call, returning as text.");
         }
+
+        return response;
     }
 }

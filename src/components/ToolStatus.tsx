@@ -43,7 +43,7 @@ export const ToolStatus: React.FC<ToolStatusProps> = ({ tools }) => {
                                         </span>
                                     </div>
                                     {tool.description && (
-                                        <p className="text-sm text-gray-300 leading-relaxed">
+                                        <p className="text-sm text-gray-300 leading-relaxed break-words">
                                             {tool.description}
                                         </p>
                                     )}

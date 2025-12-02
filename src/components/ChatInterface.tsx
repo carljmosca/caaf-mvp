@@ -11,7 +11,7 @@ interface Message {
 }
 
 export const ChatInterface: React.FC = () => {
-    console.log("ChatInterface loaded - Version: TRANSFORMERS-V2");
+    //console.log("ChatInterface loaded - Version: TRANSFORMERS-V2");
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -93,7 +93,7 @@ export const ChatInterface: React.FC = () => {
         <div className="flex h-screen vibrant-bg text-white font-sans">
             {/* Sidebar for Tools */}
             {/* Sidebar for Tools */}
-            <div className="w-80 border-r vibrant-border bg-slate-950/40 backdrop-blur-xl flex flex-col shadow-2xl shadow-blue-500/10">
+            <div className="w-80 min-w-[20rem] max-w-[20rem] border-r vibrant-border bg-slate-950/40 backdrop-blur-xl flex flex-col shadow-2xl shadow-blue-500/10">
                 <div className="p-4 border-b border-blue-500/10">
                     <button
                         onClick={handleNewChat}
