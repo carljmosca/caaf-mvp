@@ -24,11 +24,14 @@ export class AgentOrchestrator {
             }
 
             // 2. Construct systemPrompt with dynamic tool listing
-            let systemPrompt = `You are a helpful, expert server assistant capable of utilizing external tools to answer user queries (as opoosed to answering them yourself).`;
-            systemPrompt += `Your primary function is to analyze the user's request and determine if one of the AVAILABLE TOOLS is appropriate to answer the query.`;
-            systemPrompt += `The use of a tool should be given priority.  If an appropriate tool is available, your entire response MUST be a valid JSON object matching the Tool Use Request Format. DO NOT output any other text or explanation. If no tool is needed, respond with standard conversational text.\n\n`;
-            systemPrompt += `**INSTRUCTION:** If a tool is to be utilized, your entire response MUST ONLY be a valid JSON object matching the Tool Use Request Format. DO NOT output any other text or explanation. If no tool is appropriate, respond with standard conversational text.`
-            systemPrompt += `\n\n`;
+            let systemPrompt = `You are a helpful, expert server assistant capable of utilizing external tools to answer user queries (as opposed to answering them yourself).`;
+            systemPrompt += ` Your primary function is to analyze the user's request and determine if one of the AVAILABLE TOOLS is appropriate to answer the query.`;
+            systemPrompt += ` The use of a tool should be given priority. If an appropriate tool is available, your entire response MUST be a valid JSON object matching the Tool Use Request Format. DO NOT output any other text or explanation.`;
+            systemPrompt += ` If NONE of the tools are relevant to the user's request, you MUST NOT output any JSON or tool call. Only respond with conversational text.\n\n`;
+            systemPrompt += `**INSTRUCTION:** If a tool is to be utilized, your entire response MUST ONLY be a valid JSON object matching the Tool Use Request Format. DO NOT output any other text or explanation. If no tool is appropriate, you MUST NOT output any JSON or tool call. Only respond with conversational text.\n\n`;
+            systemPrompt += `**EXAMPLES:**\n`;
+            systemPrompt += `User: What is your name?\nAssistant: My name is GitHub Copilot.\n`;
+            systemPrompt += `User: What time is it?\nAssistant: {\n  "tool_name": "current_time",\n  "tool_arguments": {}\n}\n`;
             systemPrompt += '**Tool Use Request Format (MANDATORY JSON SCHEMA):**\n';
             systemPrompt += '{\n  "tool_name": "<name_of_tool_to_use>",\n  "tool_arguments": {\n    "<argument_name>": "<value>",\n    ...\n  }\n}\n\n';
             systemPrompt += '**AVAILABLE TOOLS:**\n\n';
@@ -58,30 +61,30 @@ export class AgentOrchestrator {
             response = await this.aiService.generate(messages, onProgress);
             console.log("AI service response:", response);
 
-            // 2. Robustly extract the last valid JSON object (brace-matching, supports nested)
-            function extractLastJsonObject(text: string): any | null {
-                let end = text.lastIndexOf('}');
-                while (end !== -1) {
-                    let stack = 0;
-                    for (let start = end; start >= 0; start--) {
-                        if (text[start] === '}') stack++;
-                        else if (text[start] === '{') stack--;
-                        if (stack === 0) {
-                            const candidate = text.slice(start, end + 1);
-                            try {
-                                const parsed = JSON.parse(candidate);
-                                if (parsed && parsed.tool_name) return parsed;
-                            } catch (e) {
-                                // Not valid JSON, keep searching
-                            }
+            // Only extract trailing JSON if the last character is a closing brace
+            function extractTrailingJsonObject(text: string): any | null {
+                text = text.trim();
+                if (!text.endsWith('}')) return null;
+                // Find the start of the trailing JSON object
+                let stack = 0;
+                for (let i = text.length - 1; i >= 0; i--) {
+                    if (text[i] === '}') stack++;
+                    else if (text[i] === '{') stack--;
+                    if (stack === 0) {
+                        const candidate = text.slice(i);
+                        try {
+                            const parsed = JSON.parse(candidate);
+                            if (parsed && parsed.tool_name) return parsed;
+                        } catch (e) {
+                            // Not valid JSON
                         }
+                        break;
                     }
-                    end = text.lastIndexOf('}', end - 1);
                 }
                 return null;
             }
 
-            const lastValidJson = extractLastJsonObject(response);
+            const lastValidJson = extractTrailingJsonObject(response);
 
             if (lastValidJson && lastValidJson.tool_name) {
                 console.log(`Executing tool: ${lastValidJson.tool_name}`);
@@ -138,6 +141,18 @@ export class AgentOrchestrator {
             console.log("Response was not a valid tool call, returning as text.");
         }
 
+        // Fallback: If no valid trailing JSON, return only the last part of the response string that follows the word "assistant"
+        try {
+            let lowerResponse = response.toLowerCase();
+            let idx = lowerResponse.lastIndexOf("assistant");
+            if (idx !== -1) {
+                // Return everything after "assistant"
+                return response.slice(idx + "assistant".length).trim();
+            }
+        } catch (e) {
+            // If any error, fallback to full response
+        }
+        // Fallback: return full response
         return response;
     }
 }
