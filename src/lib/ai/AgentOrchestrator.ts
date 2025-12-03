@@ -1,3 +1,9 @@
+export interface AgentResponse {
+    response: string;
+    modelSelectSeconds: string;
+    toolCallSeconds: string | null;
+    totalSeconds: string;
+}
 import { McpClientWrapper } from "../mcp/McpClient";
 import { TransformersService } from "./TransformersService";
 
@@ -10,8 +16,12 @@ export class AgentOrchestrator {
         this.aiService = aiService;
     }
 
-    async processMessage(message: string, onProgress?: (progress: any) => void): Promise<string> {
+    async processMessage(message: string, onProgress?: (progress: any) => void): Promise<AgentResponse> {
         let response: string = "";
+        let modelSelectStart = performance.now();
+        let modelSelectEnd = 0;
+        let toolCallStart = 0;
+        let toolCallEnd = 0;
         try {
             // 1. Fetch available tools
             let tools: any[] = [];
@@ -59,6 +69,7 @@ export class AgentOrchestrator {
             ];
             console.log("Sending messages to AI service:", messages);
             response = await this.aiService.generate(messages, onProgress);
+            modelSelectEnd = performance.now();
             console.log("AI service response:", response);
 
             // Remove all markdown code block wrappers from the entire response
@@ -71,6 +82,7 @@ export class AgentOrchestrator {
             const lastValidJson = this.extractTrailingJsonObject(cleanedResponse);
 
             if (lastValidJson && lastValidJson.tool_name) {
+                toolCallStart = performance.now();
                 console.log(`Executing tool: ${lastValidJson.tool_name}`);
                 // Use empty object if tool_arguments is missing or not an object
                 let args = {};
@@ -78,6 +90,7 @@ export class AgentOrchestrator {
                     args = lastValidJson.tool_arguments;
                 }
                 const toolResult = await this.mcpClient.callTool(lastValidJson.tool_name, args);
+                toolCallEnd = performance.now();
 
                 // Optional: Feed tool result back to model for a final natural language response
                 // For MVP, we'll just return the tool output formatted nicely
@@ -118,7 +131,13 @@ export class AgentOrchestrator {
                     outputDisplay = typeof extractedResult === 'string' ? extractedResult : JSON.stringify(extractedResult, null, 2);
                 }
 
-                return `Response from '${lastValidJson.tool_name}':\n${outputDisplay}`;
+                // Return timing info as well
+                return {
+                    response: `Response from '${lastValidJson.tool_name}':\n${outputDisplay}`,
+                    modelSelectSeconds: ((modelSelectEnd - modelSelectStart) / 1000).toFixed(2),
+                    toolCallSeconds: ((toolCallEnd - toolCallStart) / 1000).toFixed(2),
+                    totalSeconds: ((toolCallEnd - modelSelectStart) / 1000).toFixed(2)
+                };
             }
         } catch (e) {
             // Not JSON or invalid format, treat as normal text
@@ -128,13 +147,20 @@ export class AgentOrchestrator {
         // Fallback: If no valid trailing JSON, return only the last part of the response string that follows the word "assistant"
         const lowerResponse = response.toLowerCase();
         const idx = lowerResponse.lastIndexOf("assistant");
+        let fallbackText = response;
         if (idx !== -1) {
             // Return everything after "assistant"
-            return response.slice(idx + "assistant".length).trim();
+            fallbackText = response.slice(idx + "assistant".length).trim();
         }
 
-        // Fallback: return full response
-        return response;
+        // Fallback: return full response with timing info
+        const endTime = performance.now();
+        return {
+            response: fallbackText,
+            modelSelectSeconds: ((endTime - modelSelectStart) / 1000).toFixed(2),
+            toolCallSeconds: null,
+            totalSeconds: ((endTime - modelSelectStart) / 1000).toFixed(2)
+        };
     }
 
     // Only extract trailing JSON if the last character is a closing brace

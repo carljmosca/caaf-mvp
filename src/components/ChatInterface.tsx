@@ -3,6 +3,7 @@ import { Send, Cpu, PlusCircle } from 'lucide-react';
 import { McpClientWrapper } from '../lib/mcp/McpClient';
 import { TransformersService } from '../lib/ai/TransformersService';
 import { AgentOrchestrator } from '../lib/ai/AgentOrchestrator';
+import type { AgentResponse } from '../lib/ai/AgentOrchestrator';
 import { ToolStatus } from './ToolStatus';
 
 interface Message {
@@ -84,17 +85,20 @@ export const ChatInterface: React.FC = () => {
         setInput('');
         setIsProcessing(true);
 
-        const startTime = performance.now();
         try {
             setDownloadProgress(null);
-            const response = await orchestrator.processMessage(input, (progress) => {
+            const result: AgentResponse = await orchestrator.processMessage(input, (progress) => {
                 setDownloadProgress(progress);
             });
-            const endTime = performance.now();
-            const elapsedSeconds = ((endTime - startTime) / 1000).toFixed(2);
+            let timingInfo = '';
+            if (result.toolCallSeconds) {
+                timingInfo = `\n\n⏱️ Tool selection: ${result.modelSelectSeconds} s\n⏱️ MCP tool response: ${result.toolCallSeconds} s\n⏱️ Total response: ${result.totalSeconds} s`;
+            } else {
+                timingInfo = `\n\n⏱️ Total response: ${result.totalSeconds} s`;
+            }
             setMessages(prev => [...prev, {
                 role: 'agent',
-                content: `${response}\n\n⏱️ Response time: ${elapsedSeconds} seconds`
+                content: `${result.response}${timingInfo}`
             }]);
         } catch (e) {
             setMessages(prev => [...prev, { role: 'agent', content: 'Error processing message.' }]);
