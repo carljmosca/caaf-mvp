@@ -94,7 +94,7 @@ The application will likely be available at `http://localhost:5173`.
 
 ## 🔧 Configuration
 
-- **MCP Server URL**: You can configure the MCP server URL and transport type (HTTP/WebSocket) in the top right corner if the auto-connection fails or if you need to switch servers.
+**Note:** The application now auto-connects to the local MCP server at `http://localhost:3000/mcp`. Manual configuration of the MCP server URL or transport type is no longer supported in the UI.
 
 ## 🤝 Contributing
 
