@@ -66,7 +66,7 @@ While improved models and hardware will increase accuracy and performance over t
 ## 🏃‍♂️ Running the Application
 
 ### 1. Start the MCP Server
-This application is designed to work with the MCP server from the [mcp-typescript-example](https://github.com/carljmosca/mcp-typescript-example) repository.
+This application is designed to work with the MCP servers and has been tested with the one from [mcp-typescript-example](https://github.com/carljmosca/mcp-typescript-example) repository.
 
 1.  Clone and set up the MCP server:
     ```bash
