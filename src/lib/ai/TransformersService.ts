@@ -3,12 +3,12 @@ import { AutoTokenizer, AutoModelForCausalLM, TextStreamer, InterruptableStoppin
 
 
 export class TransformersService {
-    private static modelId: string = 'onnx-community/granite-4.0-micro-ONNX-web';
-    private static tokenizer: any = null;
-    private static model: any = null;
-    private static isLoading: boolean = false;
-    private static stoppingCriteria = new InterruptableStoppingCriteria();
-    private static pastKeyValuesCache: any = null;
+    private modelId: string = 'onnx-community/granite-4.0-micro-ONNX-web';
+    private tokenizer: any = null;
+    private model: any = null;
+    private isLoading: boolean = false;
+    private stoppingCriteria = new InterruptableStoppingCriteria();
+    private pastKeyValuesCache: any = null;
 
 
     constructor() {
@@ -16,37 +16,51 @@ export class TransformersService {
     }
 
 
+    async setModel(modelId: string) {
+        if (this.modelId === modelId && this.model) return;
+
+        this.modelId = modelId;
+        this.tokenizer = null;
+        this.model = null;
+        this.pastKeyValuesCache = null;
+        // We don't auto-initialize here, it will happen on next generate or explicit initialize call
+    }
+
+    getModelId() {
+        return this.modelId;
+    }
+
     async initialize(progressCallback?: (progress: any) => void) {
-        if (TransformersService.tokenizer && TransformersService.model) return;
-        if (TransformersService.isLoading) return;
-        TransformersService.isLoading = true;
+        if (this.tokenizer && this.model) return;
+        if (this.isLoading) return;
+        this.isLoading = true;
         try {
-            console.log(`Loading model and tokenizer: ${TransformersService.modelId}...`);
-            TransformersService.tokenizer = await AutoTokenizer.from_pretrained(TransformersService.modelId, {
+            console.log(`Loading model and tokenizer: ${this.modelId}...`);
+            this.tokenizer = await AutoTokenizer.from_pretrained(this.modelId, {
                 progress_callback: progressCallback,
             });
-            TransformersService.model = await AutoModelForCausalLM.from_pretrained(TransformersService.modelId, {
+            this.model = await AutoModelForCausalLM.from_pretrained(this.modelId, {
                 dtype: 'q4f16',
                 device: 'webgpu',
                 progress_callback: progressCallback,
             });
             // Warm up model (compile shaders)
-            const inputs = TransformersService.tokenizer('a');
-            await TransformersService.model.generate({ ...inputs, max_new_tokens: 1 });
+            const inputs = this.tokenizer('a');
+            await this.model.generate({ ...inputs, max_new_tokens: 1 });
             console.log('Model and tokenizer loaded and warmed up.');
         } catch (error) {
             console.error('Failed to load model or tokenizer:', error);
             throw error;
         } finally {
-            TransformersService.isLoading = false;
+            this.isLoading = false;
         }
     }
 
 
     async generate(messages: any[], onProgress?: (progress: any) => void): Promise<string> {
         await this.initialize(onProgress);
-        const tokenizer = TransformersService.tokenizer;
-        const model = TransformersService.model;
+        const tokenizer = this.tokenizer;
+        const model = this.model;
         if (!tokenizer || !model) {
             throw new Error('Model or tokenizer not loaded');
         }
@@ -79,13 +93,13 @@ export class TransformersService {
         try {
             const { past_key_values, sequences } = await model.generate({
                 ...inputs,
-                past_key_values: TransformersService.pastKeyValuesCache,
+                past_key_values: this.pastKeyValuesCache,
                 max_new_tokens: 1024,
                 streamer,
-                stopping_criteria: TransformersService.stoppingCriteria,
+                stopping_criteria: this.stoppingCriteria,
                 return_dict_in_generate: true,
             });
-            TransformersService.pastKeyValuesCache = past_key_values;
+            this.pastKeyValuesCache = past_key_values;
             const decoded = tokenizer.batch_decode(sequences, {
                 skip_special_tokens: true,
             });

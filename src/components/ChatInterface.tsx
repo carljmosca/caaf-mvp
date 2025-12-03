@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Send, Cpu, PlusCircle } from 'lucide-react';
 import { McpClientWrapper } from '../lib/mcp/McpClient';
 import { TransformersService } from '../lib/ai/TransformersService';
@@ -11,7 +11,6 @@ interface Message {
 }
 
 export const ChatInterface: React.FC = () => {
-    //console.log("ChatInterface loaded - Version: TRANSFORMERS-V2");
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -19,46 +18,63 @@ export const ChatInterface: React.FC = () => {
     const [aiService] = useState(() => new TransformersService());
     const [orchestrator] = useState(() => new AgentOrchestrator(mcpClient, aiService));
     const [isConnected, setIsConnected] = useState(false);
-    const [mcpUrl, setMcpUrl] = useState('http://localhost:3000/mcp');
-    const [transportType, setTransportType] = useState<'ws' | 'http'>('http');
+    const mcpUrl = 'http://localhost:3000/mcp';
+    const transportType: 'ws' | 'http' = 'http';
     const [tools, setTools] = useState<any[]>([]);
+    const [selectedModel, setSelectedModel] = useState('onnx-community/granite-4.0-micro-ONNX-web');
     const [downloadProgress, setDownloadProgress] = useState<any>(null);
-    const hasConnected = useRef(false);
 
-    const handleConnect = async () => {
-        try {
-            await mcpClient.connect(mcpUrl, transportType);
-            setIsConnected(true);
+    const AVAILABLE_MODELS = [
+        { id: 'onnx-community/granite-4.0-micro-ONNX-web', name: 'Granite 4.0 Micro (800M) - Default' },
+        { id: 'onnx-community/Llama-3.2-1B-Instruct', name: 'Llama 3.2 1B (Faster)' },
+    ];
 
-            // Try to list available tools to verify the connection works
-            try {
-                const toolsResponse = await mcpClient.listTools();
-                console.log('Available MCP tools:', toolsResponse);
-                const discoveredTools = toolsResponse.tools || [];
-                setTools(discoveredTools);
-                setMessages(prev => [...prev, {
-                    role: 'agent',
-                    content: `Connected to MCP Server! Found ${discoveredTools.length} tools.`
-                }]);
-            } catch (toolError) {
-                console.error('Failed to list tools:', toolError);
-                setMessages(prev => [...prev, {
-                    role: 'agent',
-                    content: 'Connected to MCP Server, but failed to list tools.'
-                }]);
-            }
-        } catch (e) {
-            console.error(e);
-            setMessages(prev => [...prev, { role: 'agent', content: 'Failed to connect to MCP Server.' }]);
-        }
+    const handleModelChange = async (modelId: string) => {
+        if (isProcessing) return;
+        setSelectedModel(modelId);
+        await aiService.setModel(modelId);
+        setMessages(prev => [...prev, {
+            role: 'agent',
+            content: `Switched to model: ${AVAILABLE_MODELS.find(m => m.id === modelId)?.name}`
+        }]);
     };
 
+    // Connect to MCP server automatically on startup
     useEffect(() => {
-        if (!hasConnected.current) {
-            hasConnected.current = true;
-            handleConnect();
-        }
+        let isMounted = true;
+        const connectAndListTools = async () => {
+            try {
+                await mcpClient.connect(mcpUrl, transportType);
+                if (!isMounted) return;
+                setIsConnected(true);
+                try {
+                    const toolsResponse = await mcpClient.listTools();
+                    console.log('Available MCP tools:', toolsResponse);
+                    const discoveredTools = toolsResponse.tools || [];
+                    setTools(discoveredTools);
+                    setMessages(prev => [...prev, {
+                        role: 'agent',
+                        content: `Connected to MCP Server! Found ${discoveredTools.length} tools.`
+                    }]);
+                } catch (toolError) {
+                    console.error('Failed to list tools:', toolError);
+                    setMessages(prev => [...prev, {
+                        role: 'agent',
+                        content: 'Connected to MCP Server, but failed to list tools.'
+                    }]);
+                }
+            } catch (e) {
+                console.error(e);
+                setMessages(prev => [...prev, { role: 'agent', content: 'Failed to connect to MCP Server.' }]);
+            }
+        };
+        connectAndListTools();
+        return () => {
+            isMounted = false;
+            mcpClient.disconnect();
+        };
     }, []);
+
 
     const handleSend = async () => {
         if (!input.trim()) return;
@@ -68,12 +84,18 @@ export const ChatInterface: React.FC = () => {
         setInput('');
         setIsProcessing(true);
 
+        const startTime = performance.now();
         try {
             setDownloadProgress(null);
             const response = await orchestrator.processMessage(input, (progress) => {
                 setDownloadProgress(progress);
             });
-            setMessages(prev => [...prev, { role: 'agent', content: response }]);
+            const endTime = performance.now();
+            const elapsedSeconds = ((endTime - startTime) / 1000).toFixed(2);
+            setMessages(prev => [...prev, {
+                role: 'agent',
+                content: `${response}\n\n⏱️ Response time: ${elapsedSeconds} seconds`
+            }]);
         } catch (e) {
             setMessages(prev => [...prev, { role: 'agent', content: 'Error processing message.' }]);
         } finally {
@@ -94,7 +116,7 @@ export const ChatInterface: React.FC = () => {
             {/* Sidebar for Tools */}
             {/* Sidebar for Tools */}
             <div className="w-80 min-w-[20rem] max-w-[20rem] border-r vibrant-border bg-slate-950/40 backdrop-blur-xl flex flex-col shadow-2xl shadow-blue-500/10">
-                <div className="p-4 border-b border-blue-500/10">
+                <div className="p-4 border-b border-blue-500/10 space-y-4">
                     <button
                         onClick={handleNewChat}
                         disabled={isProcessing}
@@ -103,6 +125,20 @@ export const ChatInterface: React.FC = () => {
                         <PlusCircle className="w-5 h-5 group-hover:rotate-90 transition-transform" />
                         <span>New Chat</span>
                     </button>
+
+                    <div className="space-y-2">
+                        <label className="text-xs font-semibold text-blue-300 uppercase tracking-wider ml-1">AI Model</label>
+                        <select
+                            value={selectedModel}
+                            onChange={(e) => handleModelChange(e.target.value)}
+                            disabled={isProcessing}
+                            className="w-full bg-slate-900/50 border-2 border-blue-500/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30 transition-all backdrop-blur-sm text-white disabled:opacity-50"
+                        >
+                            {AVAILABLE_MODELS.map(model => (
+                                <option key={model.id} value={model.id}>{model.name}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
 
                 <div className="flex-1 overflow-y-auto">
@@ -140,31 +176,7 @@ export const ChatInterface: React.FC = () => {
                             <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse shadow-lg shadow-emerald-400/50' : 'bg-rose-400'}`} />
                             {isConnected ? 'Connected' : 'Disconnected'}
                         </div>
-                        {!isConnected && (
-                            <div className="flex gap-2 items-center">
-                                <select
-                                    value={transportType}
-                                    onChange={(e) => setTransportType(e.target.value as 'ws' | 'http')}
-                                    className="bg-slate-900/50 border-2 border-blue-500/30 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30 transition-all backdrop-blur-sm text-white"
-                                >
-                                    <option value="ws">WebSocket</option>
-                                    <option value="http">HTTP</option>
-                                </select>
-                                <input
-                                    type="text"
-                                    value={mcpUrl}
-                                    onChange={(e) => setMcpUrl(e.target.value)}
-                                    className="bg-slate-900/50 border-2 border-blue-500/30 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30 transition-all backdrop-blur-sm text-white placeholder-gray-500"
-                                    placeholder="MCP Server URL"
-                                />
-                                <button
-                                    onClick={handleConnect}
-                                    className="vibrant-gradient-btn text-white px-5 py-2 rounded-lg text-sm font-bold transition-all"
-                                >
-                                    Connect
-                                </button>
-                            </div>
-                        )}
+                        {/* Connection controls removed: now connects automatically on startup */}
                     </div>
                 </header>
 
@@ -175,7 +187,7 @@ export const ChatInterface: React.FC = () => {
                             <div className="p-8 bg-gradient-to-br from-blue-500/10 via-blue-400/10 to-blue-600/10 rounded-3xl border-2 border-blue-500/20 backdrop-blur-sm shadow-2xl shadow-blue-500/20">
                                 <Cpu className="w-24 h-24 mb-4 text-blue-400/60 mx-auto animate-pulse" />
                                 <p className="text-gray-300 text-center font-medium">Start a conversation with your local AI agent...</p>
-                                <p className="text-xs text-gray-500 text-center mt-2">(Model: onnx-community/granite-4.0-350m-ONNX-web)</p>
+                                <p className="text-xs text-gray-500 text-center mt-2">(Model: {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name})</p>
                             </div>
                         </div>
                     )}

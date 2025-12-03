@@ -40,7 +40,7 @@ export class AgentOrchestrator {
                 systemPrompt += `    * Description: ${tool.description || 'No description provided.'}\n`;
                 if (tool.inputSchema && tool.inputSchema.properties && Object.keys(tool.inputSchema.properties).length > 0) {
                     systemPrompt += `    * Arguments:`;
-                    type ArgSchema = { type?: string; description?: string; [key: string]: any };
+                    type ArgSchema = { type?: string; description?: string;[key: string]: any };
                     Object.entries(tool.inputSchema.properties as Record<string, ArgSchema>).forEach(([arg, schema]) => {
                         const argType = schema.type || 'unknown';
                         const argDesc = schema.description || '';
@@ -61,30 +61,14 @@ export class AgentOrchestrator {
             response = await this.aiService.generate(messages, onProgress);
             console.log("AI service response:", response);
 
-            // Only extract trailing JSON if the last character is a closing brace
-            function extractTrailingJsonObject(text: string): any | null {
-                text = text.trim();
-                if (!text.endsWith('}')) return null;
-                // Find the start of the trailing JSON object
-                let stack = 0;
-                for (let i = text.length - 1; i >= 0; i--) {
-                    if (text[i] === '}') stack++;
-                    else if (text[i] === '{') stack--;
-                    if (stack === 0) {
-                        const candidate = text.slice(i);
-                        try {
-                            const parsed = JSON.parse(candidate);
-                            if (parsed && parsed.tool_name) return parsed;
-                        } catch (e) {
-                            // Not valid JSON
-                        }
-                        break;
-                    }
-                }
-                return null;
-            }
+            // Remove all markdown code block wrappers from the entire response
+            let cleanedResponse = response.trim();
+            // Remove all code blocks (```json ... ``` or ``` ... ```)
+            const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
+            // If any code block is present, replace with just the inner content
+            cleanedResponse = cleanedResponse.replace(codeBlockRegex, (_, code) => code.trim());
 
-            const lastValidJson = extractTrailingJsonObject(response);
+            const lastValidJson = this.extractTrailingJsonObject(cleanedResponse);
 
             if (lastValidJson && lastValidJson.tool_name) {
                 console.log(`Executing tool: ${lastValidJson.tool_name}`);
@@ -95,7 +79,7 @@ export class AgentOrchestrator {
                 }
                 const toolResult = await this.mcpClient.callTool(lastValidJson.tool_name, args);
 
-                // Optional: Feed tool result back to Granite for a final natural language response
+                // Optional: Feed tool result back to model for a final natural language response
                 // For MVP, we'll just return the tool output formatted nicely
                 // Check if the result has a 'result' property and use it if available
                 let outputDisplay = `Output: ${JSON.stringify(toolResult, null, 2)}`;
@@ -142,17 +126,37 @@ export class AgentOrchestrator {
         }
 
         // Fallback: If no valid trailing JSON, return only the last part of the response string that follows the word "assistant"
-        try {
-            let lowerResponse = response.toLowerCase();
-            let idx = lowerResponse.lastIndexOf("assistant");
-            if (idx !== -1) {
-                // Return everything after "assistant"
-                return response.slice(idx + "assistant".length).trim();
-            }
-        } catch (e) {
-            // If any error, fallback to full response
+        const lowerResponse = response.toLowerCase();
+        const idx = lowerResponse.lastIndexOf("assistant");
+        if (idx !== -1) {
+            // Return everything after "assistant"
+            return response.slice(idx + "assistant".length).trim();
         }
+
         // Fallback: return full response
         return response;
+    }
+
+    // Only extract trailing JSON if the last character is a closing brace
+    private extractTrailingJsonObject(text: string): any | null {
+        text = text.trim();
+        if (!text.endsWith('}')) return null;
+        // Find the start of the trailing JSON object
+        let stack = 0;
+        for (let i = text.length - 1; i >= 0; i--) {
+            if (text[i] === '}') stack++;
+            else if (text[i] === '{') stack--;
+            if (stack === 0) {
+                const candidate = text.slice(i);
+                try {
+                    const parsed = JSON.parse(candidate);
+                    if (parsed && parsed.tool_name) return parsed;
+                } catch (e) {
+                    // Not valid JSON
+                }
+                break;
+            }
+        }
+        return null;
     }
 }
