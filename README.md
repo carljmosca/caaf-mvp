@@ -2,7 +2,7 @@
 
 A browser-based AI agent framework built with React, TypeScript, and Transformers.js. This application runs AI inference directly in the browser and connects to Model Context Protocol (MCP) tools running locally for illustration purposes.
 
-The project was created to explore the use of locally-running (open source) languge models and MCP servers. The primary goal is to accept a user prompt, leverage the language model to discern if an approprite MCP Tool is available and appropriate to use to respond or use the model itself. Various models were tested and the current version of the application includes two (references below).  While the Granite model from IBM seems to be the more accurate of the two, on a MacBook with an Apple M4 processor, it takes 20+ seconds to respond.  The Llama model responds faster (6+ seconds) but did not choose the correct tool as consistently as the Granite model did. 
+The project was created to explore the use of locally-running (open source) languge models and MCP servers. The primary goal is to accept a user prompt, leverage the language model to discern if an approprite MCP Tool is available and appropriate to use to respond or use the model itself. Various models were tested and the current version of the application includes two (references below).  While the Granite model from IBM seems to be the more accurate of the two, on a MacBook with an Apple M4 processor, it takes 20+ seconds to respond (NOTE: Running the application as a PWA includes a significant performance improvementmv ).  The Llama model responds faster (6+ seconds) but did not choose the correct tool as consistently as the Granite model did. 
 
 While improved models and hardware will increase accuracy and performance over time, the prompts (both user and generated system prompts) are a significant piece of the puzzle. Perhaps additional manual and LLM-assisted tweaking of the prompts is an exercise of interest.
 
@@ -31,6 +31,10 @@ While improved models and hardware will increase accuracy and performance over t
 **Granite: Current Time Tool Example**
 
 ![Granite 4.0 Micro - Current Time Tool](images/Granite4.0Micro_CurrentTime.png)
+
+**Granite: PWA Examples**
+
+![Granite 4.0 Micro - Current Time Tool](images/Granite4.0Micro_PWA.png)
 
 ### Llama 3.2 1B Model
 
