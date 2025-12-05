@@ -20,7 +20,7 @@ export default defineConfig({
         'apple-touch-icon.png',
         'masked-icon.svg',
         'main.wasm',
-        'main.wasm-loader.js',
+
         'wasm_exec.js'
       ],
       manifest: {
