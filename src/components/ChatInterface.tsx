@@ -1,10 +1,10 @@
 // ...existing code...
 import React, { useState, useEffect } from 'react';
-import { Send, Cpu, PlusCircle } from 'lucide-react';
+import { Send, Cpu, PlusCircle, Menu, X } from 'lucide-react';
 import { McpClientWrapper } from '../lib/mcp/McpClient';
 import { TransformersService } from '../lib/ai/TransformersService';
 import { AgentOrchestrator } from '../lib/ai/AgentOrchestrator';
-import { ToolStatus } from './ToolStatus';
+
 
 type Message = {
     role: 'user' | 'agent';
@@ -29,6 +29,7 @@ export const ChatInterface: React.FC = () => {
     const [tools, setTools] = useState<any[]>([]);
     const [selectedModel, setSelectedModel] = useState('onnx-community/granite-4.0-micro-ONNX-web');
     const [downloadProgress, setDownloadProgress] = useState<any>(null);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
     // Remove serverType and related logic
 
     const AVAILABLE_MODELS = [
@@ -64,15 +65,19 @@ export const ChatInterface: React.FC = () => {
             try {
                 const toolsResponse = await client.listTools();
                 console.log('listTools response:', toolsResponse);
-                                const discoveredTools = Array.isArray(toolsResponse)
-                                    ? toolsResponse
-                                    : (toolsResponse.result && toolsResponse.result.tools) ? toolsResponse.result.tools : [];
+                const discoveredTools = Array.isArray(toolsResponse)
+                    ? toolsResponse
+                    : (toolsResponse.result && toolsResponse.result.tools) ? toolsResponse.result.tools : [];
                 console.log('discoveredTools:', discoveredTools);
                 setTools(discoveredTools);
-                setMessages(prev => [...prev, {
-                    role: 'agent',
-                    content: `MCP Server loaded in browser. Found ${discoveredTools.length} tools.`
-                }]);
+                setMessages(prev => {
+                    if (prev.some(m => m.content.startsWith('MCP Server loaded'))) return prev;
+                    const toolList = discoveredTools.map((t: any) => `- **${t.name}**: ${t.description || 'No description'}`).join('\n');
+                    return [...prev, {
+                        role: 'agent',
+                        content: `MCP Server loaded. Found ${discoveredTools.length} tools.\n\n${toolList}`
+                    }];
+                });
             } catch (toolError) {
                 console.error('Error in tool discovery:', toolError);
                 setMessages(prev => [...prev, {
@@ -125,14 +130,29 @@ export const ChatInterface: React.FC = () => {
     };
 
     return (
-        <div className="flex h-screen vibrant-bg text-white font-sans">
-            <div className="w-80 min-w-[20rem] max-w-[20rem] border-r vibrant-border bg-slate-950/40 backdrop-blur-xl flex flex-col shadow-2xl shadow-blue-500/10">
-                <div className="p-4 border-b border-blue-500/10 space-y-4">
-                                        {/* MCP Server Type selection removed: always use WASM MCP Server */}
+        <div className="flex h-screen vibrant-bg text-white font-sans overflow-hidden">
+
+            {/* Mobile Backdrop */}
+            {isSidebarOpen && (
+                <div
+                    className="fixed inset-0 z-20 bg-black/50 md:hidden backdrop-blur-sm"
+                    onClick={() => setIsSidebarOpen(false)}
+                />
+            )}
+
+            <div className={`fixed inset-y-0 left-0 z-30 w-80 min-w-[20rem] max-w-[20rem] border-r vibrant-border bg-slate-950 md:bg-slate-950/40 backdrop-blur-xl flex flex-col transition-all duration-300 ease-in-out md:relative md:translate-x-0 md:visible md:shadow-2xl md:shadow-blue-500/10 ${isSidebarOpen ? 'translate-x-0 visible shadow-2xl shadow-blue-500/10' : '-translate-x-full invisible'}`}>
+                <div className="md:hidden flex items-center justify-start px-4 pt-4 pb-2">
+                    <button onClick={() => setIsSidebarOpen(false)} className="p-2 -ml-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
+                        <X className="w-6 h-6" />
+                    </button>
+                </div>
+
+                <div className="p-4 border-b border-blue-500/10 space-y-6">
+                    {/* MCP Server Type selection removed: always use WASM MCP Server */}
                     <button
                         onClick={handleNewChat}
                         disabled={isProcessing}
-                        className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed font-medium group"
+                        className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed font-medium group"
                     >
                         <PlusCircle className="w-5 h-5 group-hover:rotate-90 transition-transform" />
                         <span>New Chat</span>
@@ -154,11 +174,9 @@ export const ChatInterface: React.FC = () => {
                 </div>
 
                 <div className="flex-1 overflow-y-auto">
-                    {isConnected ? (
-                        <ToolStatus tools={tools} />
-                    ) : (
+                    {!isConnected && (
                         <div className="p-6 text-center text-gray-500 text-sm">
-                            <p>Connect to MCP Server to see available tools.</p>
+                            <p>Connecting to MCP Server...</p>
                         </div>
                     )}
                 </div>
@@ -167,9 +185,15 @@ export const ChatInterface: React.FC = () => {
             {/* Main Chat Area */}
             <div className="flex flex-col flex-1">
                 {/* Header */}
-                <header className="flex items-center justify-between p-5 border-b vibrant-border bg-slate-950/40 backdrop-blur-xl sticky top-0 z-10 shadow-lg shadow-blue-500/5">
+                <header className="flex items-center justify-between p-4 md:p-5 border-b vibrant-border bg-slate-950/40 backdrop-blur-xl sticky top-0 z-10 shadow-lg shadow-blue-500/5">
                     <div className="flex items-center gap-3">
-                        <div className="p-2.5 vibrant-icon-box rounded-xl">
+                        <button
+                            onClick={() => setIsSidebarOpen(true)}
+                            className="md:hidden p-2 -ml-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                        >
+                            <Menu className="w-6 h-6" />
+                        </button>
+                        <div className="p-2.5 vibrant-icon-box rounded-xl hidden md:block">
                             <Cpu className="w-6 h-6 text-white" />
                         </div>
                         <div>
@@ -179,17 +203,7 @@ export const ChatInterface: React.FC = () => {
                             <p className="text-xs text-gray-400">AI Agent Framework</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-4">
 
-                        <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-all ${isConnected
-                            ? 'status-connected'
-                            : 'status-disconnected'
-                            }`}>
-                            <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse shadow-lg shadow-emerald-400/50' : 'bg-rose-400'}`} />
-                            {isConnected ? 'Connected' : 'Disconnected'}
-                        </div>
-                        {/* Connection controls removed: now connects automatically on startup */}
-                    </div>
                 </header>
 
                 {/* Chat Area */}
@@ -209,7 +223,7 @@ export const ChatInterface: React.FC = () => {
                                 ? 'bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 text-white rounded-br-sm shadow-blue-500/50 font-medium'
                                 : 'bg-slate-900/60 text-white rounded-bl-sm border-2 border-blue-500/20 backdrop-blur-sm shadow-blue-500/20'
                                 }`}>
-                                <p className="leading-relaxed">{msg.content}</p>
+                                <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                             </div>
                         </div>
                     ))}

@@ -59,7 +59,7 @@ export class McpClientWrapper {
         }
     }
 
-    private async waitForMcpServer(timeoutMs = 10000): Promise<void> {
+    private async waitForMcpServer(timeoutMs = 60000): Promise<void> {
         const start = Date.now();
         while (Date.now() - start < timeoutMs) {
             if (typeof (window as any).mcpHandleRequest === 'function') {
