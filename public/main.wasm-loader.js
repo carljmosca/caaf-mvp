@@ -8,7 +8,9 @@
   }
   const go = new Go();
   try {
-    const wasmResponse = await fetch('/main.wasm');
+    // Use Vite's base path for asset loading
+    const base = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) ? import.meta.env.BASE_URL : '/';
+    const wasmResponse = await fetch(base + 'main.wasm');
     if (!wasmResponse.ok) throw new Error('Failed to fetch main.wasm');
     const wasmBytes = await wasmResponse.arrayBuffer();
     const { instance } = await WebAssembly.instantiate(wasmBytes, go.importObject);
