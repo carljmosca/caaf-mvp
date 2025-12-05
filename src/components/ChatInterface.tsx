@@ -72,7 +72,7 @@ export const ChatInterface: React.FC = () => {
                 setTools(discoveredTools);
                 setMessages(prev => {
                     if (prev.some(m => m.content.startsWith('MCP Server loaded'))) return prev;
-                    const toolList = discoveredTools.map((t: any) => `- **${t.name}**: ${t.description || 'No description'}`).join('\n');
+                    const toolList = discoveredTools.map((t: any) => `• ${t.name}: ${t.description || 'No description'}`).join('\n');
                     return [...prev, {
                         role: 'agent',
                         content: `MCP Server loaded. Found ${discoveredTools.length} tools.\n\n${toolList}`
@@ -140,7 +140,7 @@ export const ChatInterface: React.FC = () => {
                 />
             )}
 
-            <div className={`fixed inset-y-0 left-0 z-30 w-80 min-w-[20rem] max-w-[20rem] border-r vibrant-border bg-slate-950 md:bg-slate-950/40 backdrop-blur-xl flex flex-col transition-all duration-300 ease-in-out md:relative md:translate-x-0 md:visible md:shadow-2xl md:shadow-blue-500/10 ${isSidebarOpen ? 'translate-x-0 visible shadow-2xl shadow-blue-500/10' : '-translate-x-full invisible'}`}>
+            <div className={`fixed inset-y-0 left-0 z-50 w-80 min-w-[20rem] max-w-[20rem] border-r vibrant-border bg-slate-950 md:bg-slate-950/40 md:backdrop-blur-xl flex flex-col transition-all duration-300 ease-in-out md:relative md:translate-x-0 md:visible md:shadow-2xl md:shadow-blue-500/10 ${isSidebarOpen ? 'translate-x-0 visible shadow-2xl shadow-blue-500/10' : '-translate-x-full invisible'}`}>
                 <div className="md:hidden flex items-center justify-start px-4 pt-4 pb-2">
                     <button onClick={() => setIsSidebarOpen(false)} className="p-2 -ml-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
                         <X className="w-6 h-6" />
