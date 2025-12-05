@@ -6,6 +6,10 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   base: '/caaf-mvp/',
   server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp'
+    }
   },
   plugins: [
     react(),
