@@ -1,29 +1,35 @@
+// ...existing code...
 import React, { useState, useEffect } from 'react';
 import { Send, Cpu, PlusCircle } from 'lucide-react';
 import { McpClientWrapper } from '../lib/mcp/McpClient';
 import { TransformersService } from '../lib/ai/TransformersService';
 import { AgentOrchestrator } from '../lib/ai/AgentOrchestrator';
-import type { AgentResponse } from '../lib/ai/AgentOrchestrator';
 import { ToolStatus } from './ToolStatus';
 
-interface Message {
+type Message = {
     role: 'user' | 'agent';
     content: string;
-}
+};
 
+type AgentResponse = {
+    response: string;
+    modelSelectSeconds: string;
+    toolCallSeconds: string | null;
+    totalSeconds: string;
+};
 export const ChatInterface: React.FC = () => {
+    // All hooks and logic must be inside the component
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
-    const [mcpClient] = useState(() => new McpClientWrapper());
+    const [mcpClient, setMcpClient] = useState(() => new McpClientWrapper());
     const [aiService] = useState(() => new TransformersService());
-    const [orchestrator] = useState(() => new AgentOrchestrator(mcpClient, aiService));
+    const [orchestrator, setOrchestrator] = useState(() => new AgentOrchestrator(mcpClient, aiService));
     const [isConnected, setIsConnected] = useState(false);
-    const mcpUrl = 'http://localhost:3000/mcp';
-    const transportType: 'ws' | 'http' = 'http';
     const [tools, setTools] = useState<any[]>([]);
     const [selectedModel, setSelectedModel] = useState('onnx-community/granite-4.0-micro-ONNX-web');
     const [downloadProgress, setDownloadProgress] = useState<any>(null);
+    // Remove serverType and related logic
 
     const AVAILABLE_MODELS = [
         { id: 'onnx-community/granite-4.0-micro-ONNX-web', name: 'Granite 4.0 Micro (800M) - Default' },
@@ -40,51 +46,54 @@ export const ChatInterface: React.FC = () => {
         }]);
     };
 
-    // Connect to MCP server automatically on startup
     useEffect(() => {
-        let isMounted = true;
+        //let isMounted = true;
         const connectAndListTools = async () => {
+            setIsConnected(false);
+            setTools([]);
+            setMessages(prev => {
+                // Remove any previous 'Connecting to MCP Server' status
+                const filtered = prev.filter(m => !m.content.startsWith('Connecting to MCP Server'));
+                return [...filtered, { role: 'agent', content: 'Connecting to MCP Server...' }];
+            });
+            // MCP server should already be loaded by loader script
+            const client = new McpClientWrapper();
+            setMcpClient(client);
+            setOrchestrator(new AgentOrchestrator(client, aiService));
+            setIsConnected(true);
             try {
-                await mcpClient.connect(mcpUrl, transportType);
-                if (!isMounted) return;
-                setIsConnected(true);
-                try {
-                    const toolsResponse = await mcpClient.listTools();
-                    console.log('Available MCP tools:', toolsResponse);
-                    const discoveredTools = toolsResponse.tools || [];
-                    setTools(discoveredTools);
-                    setMessages(prev => [...prev, {
-                        role: 'agent',
-                        content: `Connected to MCP Server! Found ${discoveredTools.length} tools.`
-                    }]);
-                } catch (toolError) {
-                    console.error('Failed to list tools:', toolError);
-                    setMessages(prev => [...prev, {
-                        role: 'agent',
-                        content: 'Connected to MCP Server, but failed to list tools.'
-                    }]);
-                }
-            } catch (e) {
-                console.error(e);
-                setMessages(prev => [...prev, { role: 'agent', content: 'Failed to connect to MCP Server.' }]);
+                const toolsResponse = await client.listTools();
+                console.log('listTools response:', toolsResponse);
+                                const discoveredTools = Array.isArray(toolsResponse)
+                                    ? toolsResponse
+                                    : (toolsResponse.result && toolsResponse.result.tools) ? toolsResponse.result.tools : [];
+                console.log('discoveredTools:', discoveredTools);
+                setTools(discoveredTools);
+                setMessages(prev => [...prev, {
+                    role: 'agent',
+                    content: `MCP Server loaded in browser. Found ${discoveredTools.length} tools.`
+                }]);
+            } catch (toolError) {
+                console.error('Error in tool discovery:', toolError);
+                setMessages(prev => [...prev, {
+                    role: 'agent',
+                    content: 'MCP Server loaded, but failed to list tools.'
+                }]);
             }
         };
         connectAndListTools();
         return () => {
-            isMounted = false;
+            //isMounted = false;
             mcpClient.disconnect();
         };
-    }, []);
-
+    }, [aiService]);
 
     const handleSend = async () => {
-        if (!input.trim()) return;
-
+        if (!input.trim() || tools.length === 0) return;
         const userMsg: Message = { role: 'user', content: input };
         setMessages(prev => [...prev, userMsg]);
         setInput('');
         setIsProcessing(true);
-
         try {
             setDownloadProgress(null);
             const result: AgentResponse = await orchestrator.processMessage(input, (progress) => {
@@ -109,7 +118,7 @@ export const ChatInterface: React.FC = () => {
     };
 
     const handleNewChat = () => {
-        if (isProcessing) return;
+        if (isProcessing || tools.length === 0) return;
         setMessages([]);
         setInput('');
         setDownloadProgress(null);
@@ -117,10 +126,9 @@ export const ChatInterface: React.FC = () => {
 
     return (
         <div className="flex h-screen vibrant-bg text-white font-sans">
-            {/* Sidebar for Tools */}
-            {/* Sidebar for Tools */}
             <div className="w-80 min-w-[20rem] max-w-[20rem] border-r vibrant-border bg-slate-950/40 backdrop-blur-xl flex flex-col shadow-2xl shadow-blue-500/10">
                 <div className="p-4 border-b border-blue-500/10 space-y-4">
+                                        {/* MCP Server Type selection removed: always use WASM MCP Server */}
                     <button
                         onClick={handleNewChat}
                         disabled={isProcessing}
@@ -246,19 +254,21 @@ export const ChatInterface: React.FC = () => {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder="Type your message..."
+                            placeholder={tools.length === 0 ? "Loading MCP tools..." : "Type your message..."}
                             className="flex-1 bg-slate-900/50 border-2 border-blue-500/30 rounded-xl px-5 py-3 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30 transition-all backdrop-blur-sm placeholder-gray-500 text-white shadow-lg shadow-blue-500/10"
+                            disabled={isProcessing || tools.length === 0}
                         />
                         <button
                             onClick={handleSend}
-                            disabled={isProcessing || !input.trim()}
+                            disabled={isProcessing || !input.trim() || tools.length === 0}
                             className="vibrant-gradient-btn disabled:bg-gray-700 disabled:cursor-not-allowed text-white p-3 rounded-xl transition-all disabled:shadow-none flex items-center justify-center min-w-[3rem] disabled:hover:scale-100"
                         >
                             <Send className="w-5 h-5" />
                         </button>
                     </div>
                 </div>
-            </div>
+            </div> {/* End Main Chat Area */}
         </div>
     );
-};
+}
+export default ChatInterface;
