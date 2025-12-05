@@ -59,7 +59,19 @@ export class McpClientWrapper {
         }
     }
 
-    sendRequest(method: string, params: any = null): any {
+    private async waitForMcpServer(timeoutMs = 10000): Promise<void> {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            if (typeof (window as any).mcpHandleRequest === 'function') {
+                return;
+            }
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        throw new Error("MCP Server initialization timed out.");
+    }
+
+    async sendRequest(method: string, params: any = null): Promise<any> {
+        await this.waitForMcpServer();
         const request: any = {
             jsonrpc: "2.0",
             id: requestId++,
@@ -82,11 +94,8 @@ export class McpClientWrapper {
         return response;
     }
 
-
-
     async listTools() {
-        // If sendRequest is synchronous, wrap in Promise.resolve for compatibility
-        const response = await Promise.resolve(this.sendRequest('tools/list'));
+        const response = await this.sendRequest('tools/list');
         return response;
     }
 
