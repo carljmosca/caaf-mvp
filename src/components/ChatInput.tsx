@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, forwardRef } from 'react';
 import { Send, Image, Mic, Plus } from 'lucide-react';
 
 interface ChatInputProps {
@@ -11,14 +11,13 @@ interface ChatInputProps {
     onMenuClick?: () => void; // New prop for mobile menu trigger inside bar
 }
 
-export const ChatInput: React.FC<ChatInputProps> = ({
-    input,
-    setInput,
-    onSend,
-    isDisabled,
-    placeholder
-}) => {
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
+const ChatInputImpl = (
+    { input, setInput, onSend, isDisabled, placeholder }: ChatInputProps,
+    ref: React.Ref<HTMLTextAreaElement>
+) => {
+        const textareaRef = useRef<HTMLTextAreaElement>(null);
+        // If parent passes a ref, use it; else use local ref
+        const combinedRef = (ref ?? textareaRef) as React.RefObject<HTMLTextAreaElement>;
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -27,12 +26,12 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         }
     };
 
-    useEffect(() => {
-        if (textareaRef.current) {
-            textareaRef.current.style.height = 'auto';
-            textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 150)}px`;
-        }
-    }, [input]);
+        useEffect(() => {
+            if (combinedRef.current) {
+                combinedRef.current.style.height = 'auto';
+                combinedRef.current.style.height = `${Math.min(combinedRef.current.scrollHeight, 150)}px`;
+            }
+        }, [input]);
 
     return (
         <div className="bg-[#131314] px-4 pb-4 pt-2">
@@ -46,7 +45,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
                     {/* Main Input */}
                     <textarea
-                        ref={textareaRef}
+                        ref={combinedRef}
+                        autoFocus
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={handleKeyDown}
@@ -94,3 +94,5 @@ export const ChatInput: React.FC<ChatInputProps> = ({
         </div>
     );
 };
+
+export const ChatInput = React.forwardRef<HTMLTextAreaElement, ChatInputProps>(ChatInputImpl);

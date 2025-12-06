@@ -83,7 +83,9 @@ export class AgentOrchestrator {
             let outputDisplay = `Output: ${JSON.stringify(toolResult, null, 2)}`;
             let extractedResult = undefined;
             if (toolResult && typeof toolResult === 'object') {
-                if ('result' in toolResult) {
+                if (toolResult.result.content[0].text) {
+                    extractedResult = toolResult.result.content[0].text;
+                } else if ('result' in toolResult) {
                     extractedResult = (toolResult as any).result;
                 }
             }
@@ -91,7 +93,7 @@ export class AgentOrchestrator {
                 outputDisplay = typeof extractedResult === 'string' ? extractedResult : JSON.stringify(extractedResult, null, 2);
             }
             return {
-                response: `Response from '${lastValidJson.tool_name}':\n${outputDisplay}`,
+                response: `Response from '${lastValidJson.tool_name}': ${outputDisplay}`,
                 modelSelectSeconds: ((modelSelectEnd - modelSelectStart) / 1000).toFixed(2),
                 toolCallSeconds: ((toolCallEnd - toolCallStart) / 1000).toFixed(2),
                 totalSeconds: ((toolCallEnd - modelSelectStart) / 1000).toFixed(2)

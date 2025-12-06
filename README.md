@@ -4,7 +4,7 @@
 
 A browser-based AI agent framework built with React, TypeScript, and Transformers.js. This application runs AI inference directly in the browser and connects to a **WASM-based Model Context Protocol (MCP) server** running entirely within the client.
 
-The project was created to explore the use of locally-running (open source) language models and MCP servers. The primary goal is to accept a user prompt, leverage the language model to discern if an appropriate MCP Tool is available and appropriate to use to respond or use the model itself. Various models were tested and the current version of the application includes two (references below). While the Granite model from IBM seems to be the more accurate of the two, on a MacBook with an Apple M4 processor, it takes 20+ seconds to respond (NOTE: Running the application as a PWA includes a significant performance improvement). The Llama model responds faster (6+ seconds) but did not choose the correct tool as consistently as the Granite model did.
+The project was created to explore the use of locally-running (open source) language models and MCP servers. The primary goal is to accept a user prompt, leverage the language model to discern if an appropriate MCP Tool is available and appropriate to use to respond or use the model itself. Various models were tested and the current version of the application includes two (references below). While the Granite model from IBM seems to be the more accurate of the two, on a MacBook with an Apple M4 processor, it takes 7+ seconds to respond. The Llama model responds faster (6+ seconds) but did not choose the correct tool as consistently as the Granite model did.
 
 While improved models and hardware will increase accuracy and performance over time, the prompts (both user and generated system prompts) are a significant piece of the puzzle. Perhaps additional manual and LLM-assisted tweaking of the prompts is an exercise of interest.
 
@@ -75,7 +75,7 @@ While improved models and hardware will increase accuracy and performance over t
     ```bash
     npm run dev
     ```
-    The application will be available at `http://localhost:5173`.
+    The application should be available at `http://localhost:5173`.
  
  ## 💡 Usage
  

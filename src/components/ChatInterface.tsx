@@ -19,6 +19,8 @@ type AgentResponse = {
 };
 
 export const ChatInterface: React.FC = () => {
+        // Ref for ChatInput focus
+        const chatInputRef = React.useRef<HTMLTextAreaElement>(null);
     // State
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
@@ -48,6 +50,7 @@ export const ChatInterface: React.FC = () => {
                     setInitProgress(progress);
                 });
                 setIsModelLoaded(true);
+                setTimeout(() => { chatInputRef.current?.focus(); }, 0);
             } catch (e) {
                 console.error("Failed to load model", e);
                 setInitProgress({ status: 'error', error: 'Failed to load model' });
@@ -123,6 +126,7 @@ export const ChatInterface: React.FC = () => {
                 role: 'agent',
                 content: `Switched model.`
             }]);
+            setTimeout(() => { chatInputRef.current?.focus(); }, 0);
         } catch (e) {
             console.error("Failed to switch model", e);
         } finally {
@@ -156,6 +160,7 @@ export const ChatInterface: React.FC = () => {
                 content: result.response,
                 timing: timing
             }]);
+            setTimeout(() => { chatInputRef.current?.focus(); }, 0);
         } catch (e) {
             setMessages(prev => [...prev, { role: 'agent', content: 'Error processing message.' }]);
         } finally {
@@ -170,6 +175,7 @@ export const ChatInterface: React.FC = () => {
         setInput('');
         setDownloadProgress(null);
         setIsSidebarOpen(false);
+        setTimeout(() => { chatInputRef.current?.focus(); }, 0);
     };
 
     // Show Loader if model is not ready
@@ -223,6 +229,7 @@ export const ChatInterface: React.FC = () => {
                 />
 
                 <ChatInput
+                    ref={chatInputRef}
                     input={input}
                     setInput={setInput}
                     onSend={handleSend}
