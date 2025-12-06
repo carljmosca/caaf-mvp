@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import React, { useRef, useEffect, forwardRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Send, Image, Mic, Plus } from 'lucide-react';
 
 interface ChatInputProps {
