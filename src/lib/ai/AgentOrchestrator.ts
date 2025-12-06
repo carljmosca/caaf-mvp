@@ -35,7 +35,7 @@ export class AgentOrchestrator {
         let systemPrompt = `You are a helpful, expert server assistant capable of utilizing external tools to answer user queries (as opposed to answering them yourself).`;
         systemPrompt += ` Your primary function is to analyze the user's request and determine if one of the AVAILABLE TOOLS is appropriate to answer the query.`;
         systemPrompt += ` If an APPROPRIATE tool is available, your entire response MUST be a valid JSON object matching the Tool Use Request Format.`;
-        systemPrompt += ` If NONE of the AVAILABLE TOOLS are relevant to the user's request, DO NOT return a tool call. Only respond with RELEVANT conversational text.\n\n`;
+        systemPrompt += ` If NONE of the AVAILABLE TOOLS are relevant to the user's request, DO NOT return a tool call. Only respond with RELEVANT conversational text (DO NOT call out the fact that a tool is not being used).\n\n`;
         systemPrompt += `**INSTRUCTION:** If a tool is to be utilized, your entire response MUST ONLY be a valid JSON object matching the Tool Use Request Format. DO NOT output any other text or explanation. If no tool is appropriate, you MUST NOT output any JSON or tool call. Only respond with conversational text.\n\n`;
         systemPrompt += '**Tool Use Request Format (MANDATORY JSON SCHEMA ONLY WHEN RETURNING A TOOL CALL):**\n';
         systemPrompt += '{\n  "tool_name": "<name_of_tool_to_use>",\n  "tool_arguments": {\n    "<argument_name>": "<value>",\n    ...\n  }\n}\n\n';
