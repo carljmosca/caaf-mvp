@@ -1,24 +1,25 @@
-// ...existing code...
 import React, { useState, useEffect } from 'react';
-import { Send, Cpu, PlusCircle, Menu, X } from 'lucide-react';
+import { Menu, Bot } from 'lucide-react';
 import { McpClientWrapper } from '../lib/mcp/McpClient';
 import { TransformersService } from '../lib/ai/TransformersService';
 import { AgentOrchestrator } from '../lib/ai/AgentOrchestrator';
+import { Sidebar } from './Sidebar';
+import { MessageList } from './MessageList';
+import { ChatInput } from './ChatInput';
+import { ModelLoader } from './ModelLoader';
+import { SettingsModal } from './SettingsModal';
+import type { Message } from './ChatMessage';
 
-
-type Message = {
-    role: 'user' | 'agent';
-    content: string;
-};
-
+// Define internal AgentResponse type matching the orchestrator's return
 type AgentResponse = {
     response: string;
     modelSelectSeconds: string;
     toolCallSeconds: string | null;
     totalSeconds: string;
 };
+
 export const ChatInterface: React.FC = () => {
-    // All hooks and logic must be inside the component
+    // State
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
@@ -30,89 +31,130 @@ export const ChatInterface: React.FC = () => {
     const [selectedModel, setSelectedModel] = useState('onnx-community/granite-4.0-micro-ONNX-web');
     const [downloadProgress, setDownloadProgress] = useState<any>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    // Remove serverType and related logic
 
-    const AVAILABLE_MODELS = [
-        { id: 'onnx-community/granite-4.0-micro-ONNX-web', name: 'Granite 4.0 Micro (800M) - Default' },
-        { id: 'onnx-community/Llama-3.2-1B-Instruct', name: 'Llama 3.2 1B (Faster)' },
-    ];
+    // UI State
+    const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-    const handleModelChange = async (modelId: string) => {
-        if (isProcessing) return;
-        setSelectedModel(modelId);
-        await aiService.setModel(modelId);
-        setMessages(prev => [...prev, {
-            role: 'agent',
-            content: `Switched to model: ${AVAILABLE_MODELS.find(m => m.id === modelId)?.name}`
-        }]);
-    };
+    // Initialization State
+    const [isModelLoaded, setIsModelLoaded] = useState(false);
+    const [initProgress, setInitProgress] = useState<any>(null);
 
+    // Initial connection logic
     useEffect(() => {
-        //let isMounted = true;
-        const connectAndListTools = async () => {
+        const initializeSystem = async () => {
+            // 1. Initialize Model
+            try {
+                await aiService.initialize((progress) => {
+                    setInitProgress(progress);
+                });
+                setIsModelLoaded(true);
+            } catch (e) {
+                console.error("Failed to load model", e);
+                setInitProgress({ status: 'error', error: 'Failed to load model' });
+                return;
+            }
+
+            // 2. Connect to MCP
             setIsConnected(false);
             setTools([]);
+
+            // Add system status message
             setMessages(prev => {
-                // Remove any previous 'Connecting to MCP Server' status
                 const filtered = prev.filter(m => !m.content.startsWith('Connecting to MCP Server'));
                 return [...filtered, { role: 'agent', content: 'Connecting to MCP Server...' }];
             });
-            // MCP server should already be loaded by loader script
+
             const client = new McpClientWrapper();
             setMcpClient(client);
             setOrchestrator(new AgentOrchestrator(client, aiService));
             setIsConnected(true);
+
             try {
                 const toolsResponse = await client.listTools();
                 console.log('listTools response:', toolsResponse);
                 const discoveredTools = Array.isArray(toolsResponse)
                     ? toolsResponse
                     : (toolsResponse.result && toolsResponse.result.tools) ? toolsResponse.result.tools : [];
-                console.log('discoveredTools:', discoveredTools);
+
                 setTools(discoveredTools);
+
+                // Update status message with tool results
                 setMessages(prev => {
-                    if (prev.some(m => m.content.startsWith('MCP Server loaded'))) return prev;
+                    const filtered = prev.filter(m =>
+                        m.content !== 'Connecting to MCP Server...' &&
+                        !m.content.startsWith('MCP Server connected')
+                    );
                     const toolList = discoveredTools.map((t: any) => `• ${t.name}: ${t.description || 'No description'}`).join('\n');
-                    return [...prev, {
+                    const newMsg: Message = {
                         role: 'agent',
-                        content: `MCP Server loaded. Found ${discoveredTools.length} tools.\n\n${toolList}`
-                    }];
+                        content: `MCP Server connected.\nFound ${discoveredTools.length} tools:\n${toolList}`
+                    };
+                    return [...filtered, newMsg];
                 });
             } catch (toolError) {
                 console.error('Error in tool discovery:', toolError);
-                setMessages(prev => [...prev, {
-                    role: 'agent',
-                    content: 'MCP Server loaded, but failed to list tools.'
-                }]);
+                setMessages(prev => {
+                    const filtered = prev.filter(m => m.content !== 'Connecting to MCP Server...');
+                    return [...filtered, {
+                        role: 'agent',
+                        content: 'MCP Server connected, but failed to list tools.'
+                    }];
+                });
             }
         };
-        connectAndListTools();
+
+        initializeSystem();
         return () => {
-            //isMounted = false;
             mcpClient.disconnect();
         };
     }, [aiService]);
+
+    const handleModelChange = async (modelId: string) => {
+        if (isProcessing) return;
+        setSelectedModel(modelId);
+        setIsSettingsOpen(false); // Close modal on selection
+        setIsModelLoaded(false);
+        setInitProgress({ status: 'initiating', file: 'Switching model...' });
+
+        try {
+            await aiService.setModel(modelId);
+            await aiService.initialize((progress) => setInitProgress(progress));
+            setMessages(prev => [...prev, {
+                role: 'agent',
+                content: `Switched model.`
+            }]);
+        } catch (e) {
+            console.error("Failed to switch model", e);
+        } finally {
+            setIsModelLoaded(true);
+        }
+    };
 
     const handleSend = async () => {
         if (!input.trim() || tools.length === 0) return;
         const userMsg: Message = { role: 'user', content: input };
         setMessages(prev => [...prev, userMsg]);
+        const currentInput = input;
         setInput('');
         setIsProcessing(true);
+
         try {
             setDownloadProgress(null);
-            const result: AgentResponse = await orchestrator.processMessage(input, (progress) => {
+            const result: AgentResponse = await orchestrator.processMessage(currentInput, (progress) => {
                 setDownloadProgress(progress);
             });
-            let timingInfo = '';
+
+            let timing = '';
             if (result.toolCallSeconds) {
-                timingInfo = `\n\n⏱️ Tool selection: ${result.modelSelectSeconds} s\n⏱️ MCP tool response: ${result.toolCallSeconds} s\n⏱️ Total response: ${result.totalSeconds} s`;
+                timing = `Tool selection: ${result.modelSelectSeconds}s | Tool exec: ${result.toolCallSeconds}s | Total: ${result.totalSeconds}s`;
             } else {
-                timingInfo = `\n\n⏱️ Total response: ${result.totalSeconds} s`;
+                timing = `Total time: ${result.totalSeconds}s`;
             }
+
             setMessages(prev => [...prev, {
                 role: 'agent',
-                content: `${result.response}${timingInfo}`
+                content: result.response,
+                timing: timing
             }]);
         } catch (e) {
             setMessages(prev => [...prev, { role: 'agent', content: 'Error processing message.' }]);
@@ -123,166 +165,74 @@ export const ChatInterface: React.FC = () => {
     };
 
     const handleNewChat = () => {
-        if (isProcessing || tools.length === 0) return;
+        if (isProcessing) return;
         setMessages([]);
         setInput('');
         setDownloadProgress(null);
+        setIsSidebarOpen(false);
     };
 
+    // Show Loader if model is not ready
+    if (!isModelLoaded) {
+        return <ModelLoader progress={initProgress} />;
+    }
+
     return (
-        <div className="flex h-screen vibrant-bg text-white font-sans overflow-hidden">
+        <div className="flex h-screen bg-[#131314] text-[#E3E3E3] font-sans overflow-hidden">
+            <Sidebar
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+                onNewChat={handleNewChat}
+                onOpenSettings={() => setIsSettingsOpen(true)}
+            />
 
-            {/* Mobile Backdrop */}
-            {isSidebarOpen && (
-                <div
-                    className="fixed inset-0 z-20 bg-black/50 md:hidden backdrop-blur-sm"
-                    onClick={() => setIsSidebarOpen(false)}
-                />
-            )}
+            <SettingsModal
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                selectedModel={selectedModel}
+                onModelChange={handleModelChange}
+                isProcessing={isProcessing}
+                isConnected={isConnected}
+                toolsCount={tools.length}
+            />
 
-            <div className={`fixed inset-y-0 left-0 z-50 w-80 min-w-[20rem] max-w-[20rem] border-r vibrant-border bg-slate-950 md:bg-slate-950/40 md:backdrop-blur-xl flex flex-col transition-all duration-300 ease-in-out md:relative md:translate-x-0 md:visible md:shadow-2xl md:shadow-blue-500/10 ${isSidebarOpen ? 'translate-x-0 visible shadow-2xl shadow-blue-500/10' : '-translate-x-full invisible'}`}>
-                <div className="md:hidden flex items-center justify-start px-4 pt-4 pb-2">
-                    <button onClick={() => setIsSidebarOpen(false)} className="p-2 -ml-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
-                        <X className="w-6 h-6" />
-                    </button>
-                </div>
-
-                <div className="p-4 border-b border-blue-500/10 space-y-6">
-                    {/* MCP Server Type selection removed: always use WASM MCP Server */}
+            <main className="flex-1 flex flex-col h-full relative w-full">
+                {/* Minimal Header */}
+                <header className="flex items-center justify-between px-4 py-3 bg-[#131314] sticky top-0 z-10">
                     <button
-                        onClick={handleNewChat}
-                        disabled={isProcessing}
-                        className="w-full flex items-center gap-3 px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed font-medium group"
+                        onClick={() => setIsSidebarOpen(true)}
+                        className="p-2 -ml-2 text-[#E3E3E3] hover:bg-[#2D2E2F] rounded-full transition-colors"
                     >
-                        <PlusCircle className="w-5 h-5 group-hover:rotate-90 transition-transform" />
-                        <span>New Chat</span>
+                        <Menu className="w-6 h-6" />
                     </button>
 
-                    <div className="space-y-2">
-                        <label className="text-xs font-semibold text-blue-300 uppercase tracking-wider ml-1">AI Model</label>
-                        <select
-                            value={selectedModel}
-                            onChange={(e) => handleModelChange(e.target.value)}
-                            disabled={isProcessing}
-                            className="w-full bg-slate-900/50 border-2 border-blue-500/30 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30 transition-all backdrop-blur-sm text-white disabled:opacity-50"
-                        >
-                            {AVAILABLE_MODELS.map(model => (
-                                <option key={model.id} value={model.id}>{model.name}</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-
-                <div className="flex-1 overflow-y-auto">
-                    {!isConnected && (
-                        <div className="p-6 text-center text-gray-500 text-sm">
-                            <p>Connecting to MCP Server...</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Main Chat Area */}
-            <div className="flex flex-col flex-1">
-                {/* Header */}
-                <header className="flex items-center justify-between p-4 md:p-5 border-b vibrant-border bg-slate-950/40 backdrop-blur-xl sticky top-0 z-10 shadow-lg shadow-blue-500/5">
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => setIsSidebarOpen(true)}
-                            className="md:hidden p-2 -ml-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-                        >
-                            <Menu className="w-6 h-6" />
-                        </button>
-                        <div className="p-2.5 vibrant-icon-box rounded-xl hidden md:block">
-                            <Cpu className="w-6 h-6 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold vibrant-text">
-                                CAAF Orchestrator
-                            </h1>
-                            <p className="text-xs text-gray-400">AI Agent Framework</p>
-                        </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-[#E3E3E3] opacity-80">Local Agent</span>
+                        <Bot className="w-4 h-4 text-gemini-gradient" />
                     </div>
 
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-xs font-bold text-white cursor-default">
+                        C
+                    </div>
                 </header>
 
-                {/* Chat Area */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-4 scroll-smooth">
-                    {messages.length === 0 && (
-                        <div className="flex flex-col items-center justify-center h-full">
-                            <div className="p-8 bg-gradient-to-br from-blue-500/10 via-blue-400/10 to-blue-600/10 rounded-3xl border-2 border-blue-500/20 backdrop-blur-sm shadow-2xl shadow-blue-500/20">
-                                <Cpu className="w-24 h-24 mb-4 text-blue-400/60 mx-auto animate-pulse" />
-                                <p className="text-gray-300 text-center font-medium">Start a conversation with your local AI agent...</p>
-                                <p className="text-xs text-gray-500 text-center mt-2">(Model: {AVAILABLE_MODELS.find(m => m.id === selectedModel)?.name})</p>
-                            </div>
-                        </div>
-                    )}
-                    {messages.map((msg, idx) => (
-                        <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-                            <div className={`max-w-[75%] rounded-2xl px-5 py-3 shadow-xl ${msg.role === 'user'
-                                ? 'bg-gradient-to-br from-blue-600 via-blue-500 to-blue-400 text-white rounded-br-sm shadow-blue-500/50 font-medium'
-                                : 'bg-slate-900/60 text-white rounded-bl-sm border-2 border-blue-500/20 backdrop-blur-sm shadow-blue-500/20'
-                                }`}>
-                                <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                            </div>
-                        </div>
-                    ))}
-                    {isProcessing && (
-                        <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <div className="flex justify-start">
-                                <div className="bg-slate-900/60 rounded-2xl rounded-bl-sm px-5 py-3 border-2 border-blue-500/20 backdrop-blur-sm flex items-center gap-2 shadow-xl shadow-blue-500/20">
-                                    <div className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce shadow-lg shadow-cyan-400/50" style={{ animationDelay: '0ms' }} />
-                                    <div className="w-2.5 h-2.5 bg-blue-400 rounded-full animate-bounce shadow-lg shadow-blue-400/50" style={{ animationDelay: '150ms' }} />
-                                    <div className="w-2.5 h-2.5 bg-pink-400 rounded-full animate-bounce shadow-lg shadow-pink-400/50" style={{ animationDelay: '300ms' }} />
-                                    <span className="text-xs text-blue-300 ml-2 font-medium animate-pulse">Thinking...</span>
-                                </div>
-                            </div>
+                <MessageList
+                    messages={messages}
+                    isProcessing={isProcessing}
+                    downloadProgress={downloadProgress}
+                />
 
-                            {downloadProgress && downloadProgress.status === 'progress' && (
-                                <div className="w-full max-w-md bg-slate-900/80 rounded-xl p-4 border border-blue-500/30 backdrop-blur-md shadow-2xl ml-2">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="text-xs font-semibold text-blue-300 uppercase tracking-wider">Downloading Model</span>
-                                        <span className="text-xs font-bold text-white">{Math.round(downloadProgress.progress || 0)}%</span>
-                                    </div>
-                                    <div className="w-full bg-slate-700/50 rounded-full h-1.5 overflow-hidden">
-                                        <div
-                                            className="bg-gradient-to-r from-cyan-400 to-blue-500 h-full rounded-full transition-all duration-300 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]"
-                                            style={{ width: `${downloadProgress.progress || 0}%` }}
-                                        />
-                                    </div>
-                                    <div className="flex justify-between mt-2 text-[10px] text-gray-400">
-                                        <span className="truncate max-w-[200px]">{downloadProgress.file}</span>
-                                        <span>{downloadProgress.loaded && downloadProgress.total ? `${(downloadProgress.loaded / 1024 / 1024).toFixed(1)}MB / ${(downloadProgress.total / 1024 / 1024).toFixed(1)}MB` : ''}</span>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
-                </div>
-
-                {/* Input Area */}
-                <div className="p-5 border-t border-blue-500/20 bg-slate-950/40 backdrop-blur-xl shadow-2xl shadow-blue-500/10">
-                    <div className="flex gap-3 max-w-4xl mx-auto">
-                        <input
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                            placeholder={tools.length === 0 ? "Loading MCP tools..." : "Type your message..."}
-                            className="flex-1 bg-slate-900/50 border-2 border-blue-500/30 rounded-xl px-5 py-3 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-400/30 transition-all backdrop-blur-sm placeholder-gray-500 text-white shadow-lg shadow-blue-500/10"
-                            disabled={isProcessing || tools.length === 0}
-                        />
-                        <button
-                            onClick={handleSend}
-                            disabled={isProcessing || !input.trim() || tools.length === 0}
-                            className="vibrant-gradient-btn disabled:bg-gray-700 disabled:cursor-not-allowed text-white p-3 rounded-xl transition-all disabled:shadow-none flex items-center justify-center min-w-[3rem] disabled:hover:scale-100"
-                        >
-                            <Send className="w-5 h-5" />
-                        </button>
-                    </div>
-                </div>
-            </div> {/* End Main Chat Area */}
+                <ChatInput
+                    input={input}
+                    setInput={setInput}
+                    onSend={handleSend}
+                    isProcessing={isProcessing}
+                    isDisabled={tools.length === 0 || isProcessing}
+                    placeholder={tools.length === 0 ? "Initialising system..." : "Ask me anything"}
+                />
+            </main>
         </div>
     );
 }
+
 export default ChatInterface;
