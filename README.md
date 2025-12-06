@@ -12,7 +12,7 @@ While improved models and hardware will increase accuracy and performance over t
 
 - **In-Browser Inference**: Runs the `onnx-community/granite-4.0-micro-ONNX-web` model locally in your browser using [Transformers.js](https://huggingface.co/docs/transformers.js). No external API keys or local model runners (like Ollama/LM Studio) required for the chat model.
 - **Additional Model**: You can also select the `onnx-community/Llama-3.2-1B-Instruct` model, which is available as an alternative for faster inference.
-- **WASM MCP Server**: Integrated [Model Context Protocol](https://modelcontextprotocol.io/) server running in WebAssembly, providing tools directly in the browser without external processes.
+- **WASM MCP Server**: Integrated [Model Context Protocol](https://modelcontextprotocol.io/) [server](https://github.com/carljmosca/mcp-golang-wasm-example) running in WebAssembly, providing tools directly in the browser without external processes.
 - **Auto-Connect**: Automatically initializes the internal WASM MCP server on startup.
 - **Modern UI**:
   - Vibrant, glassmorphism-inspired design.
